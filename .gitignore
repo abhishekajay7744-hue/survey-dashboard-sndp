@@ -1,0 +1,14 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+survey.db
+check_db.ts
+check_users.ts
+clear_all_dbs.ts
+fix_password.ts
+*.ts.temp

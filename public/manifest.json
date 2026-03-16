@@ -1,0 +1,17 @@
+{
+  "name": "SNDP Shakha 1176 Survey",
+  "short_name": "SNDP Survey",
+  "description": "Family Survey Application for SNDP Shakha 1176 Pirappancode",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
