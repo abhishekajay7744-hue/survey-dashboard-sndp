@@ -5,18 +5,16 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import AdmZip from "adm-zip";
-import OpenAI from "openai";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-let dbPath = "survey.db";
-if ((process.env.NODE_ENV === "production" || process.env.K_SERVICE) && process.platform !== "win32") {
+let dbPath = process.env.SQLITE_DB_PATH || "survey.db";
+if (!process.env.SQLITE_DB_PATH && (process.env.NODE_ENV === "production" || process.env.K_SERVICE) && process.platform !== "win32") {
   dbPath = "/tmp/survey.db";
 }
 
-let db;
+let db: Database.Database;
 try {
   db = new Database(dbPath);
 } catch (err) {
@@ -28,9 +26,12 @@ try {
 // Initialize Database
 try {
   const tableInfo = db.prepare("PRAGMA table_info(houses)").all() as any[];
-  const hasOldColumn = tableInfo.some(col => col.name === 'house_name');
-  if (hasOldColumn) {
-    console.log("Old schema detected, dropping houses table...");
+  const columnNames = tableInfo.map(col => col.name);
+  const hasOldColumn = columnNames.includes('house_name');
+  const missingRationCard = !columnNames.includes('ration_card_type');
+  
+  if (hasOldColumn || missingRationCard) {
+    console.log("Schema mismatch detected, dropping tables for migration...");
     db.exec("DROP TABLE IF EXISTS members"); // Drop members first due to FK
     db.exec("DROP TABLE IF EXISTS houses");
   }
@@ -43,6 +44,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     house_details TEXT,
     area TEXT,
+    ration_card_type TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -66,9 +68,22 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
     password TEXT,
+    google_id TEXT UNIQUE,
+    email TEXT UNIQUE,
     role TEXT DEFAULT 'admin'
   );
+
+  CREATE INDEX IF NOT EXISTS idx_members_house_id ON members(house_id);
+  CREATE INDEX IF NOT EXISTS idx_houses_area ON houses(area);
+  CREATE INDEX IF NOT EXISTS idx_members_name ON members(name);
+  CREATE INDEX IF NOT EXISTS idx_members_occupation ON members(occupation);
+  CREATE INDEX IF NOT EXISTS idx_members_education ON members(education);
+  CREATE INDEX IF NOT EXISTS idx_members_age ON members(age);
 `);
+
+// Enable High-Speed Mode (WAL) for faster writes and concurrent access
+db.pragma('journal_mode = WAL');
+db.pragma('cache_size = 8000'); // Larger 8MB memory cache for frequently accessed records
 
 // Create default admin if not exists
 const adminExists = db.prepare("SELECT * FROM users WHERE username = 'admin'").get();
@@ -84,7 +99,18 @@ async function startServer() {
 
   app.use(express.json());
 
-  app.get("/api/health", (req, res) => {
+  // Disable cache for index.html to prevent white screen issues from stale service workers/cache
+  app.use((req, res, next) => {
+    if (req.path === '/' || req.path === '/index.html') {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.set('Surrogate-Control', 'no-store');
+    }
+    next();
+  });
+
+  app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
@@ -99,6 +125,8 @@ async function startServer() {
       res.status(401).json({ success: false, error: "Invalid credentials" });
     }
   });
+
+
 
   app.post("/api/change-password", (req, res) => {
     const { username, oldPassword, newPassword } = req.body;
@@ -115,23 +143,65 @@ async function startServer() {
   });
 
   // API Routes
-  app.get("/api/stats", (req, res) => {
+  app.get("/api/stats", (_req, res) => {
     const totalHouses = db.prepare("SELECT COUNT(*) as count FROM houses").get() as { count: number };
     const totalMembers = db.prepare("SELECT COUNT(*) as count FROM members").get() as { count: number };
+    
+    // Ration Card Stats (Now per house)
+    const aplCount = db.prepare("SELECT COUNT(*) as count FROM houses WHERE ration_card_type = 'APL'").get() as { count: number };
+    const bplCount = db.prepare("SELECT COUNT(*) as count FROM houses WHERE ration_card_type = 'BPL'").get() as { count: number };
+    
+    // Gender Stats
+    const maleCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE gender = 'Male'").get() as { count: number };
+    const femaleCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE gender = 'Female'").get() as { count: number };
+    
+    // Student Stats (Check both occupation and education for 'student')
+    const studentCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE occupation LIKE '%student%' OR education LIKE '%student%'").get() as { count: number };
+
+    // Age Group Stats
+    const childrenCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE age < 18").get() as { count: number };
+    const adultsCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE age >= 18 AND age < 60").get() as { count: number };
+    const seniorsCount = db.prepare("SELECT COUNT(*) as count FROM members WHERE age >= 60").get() as { count: number };
 
     res.json({
       totalHouses: totalHouses.count,
-      totalMembers: totalMembers.count
+      totalMembers: totalMembers.count,
+      aplCount: aplCount.count,
+      bplCount: bplCount.count,
+      maleCount: maleCount.count,
+      femaleCount: femaleCount.count,
+      studentCount: studentCount.count,
+      ageGroups: {
+        children: childrenCount.count,
+        adults: adultsCount.count,
+        seniors: seniorsCount.count
+      }
     });
   });
 
   app.get("/api/houses", (req, res) => {
-    const houses = db.prepare("SELECT * FROM houses ORDER BY created_at DESC").all();
-    const housesWithMembers = houses.map((house: any) => {
-      const members = db.prepare("SELECT * FROM members WHERE house_id = ?").all(house.id);
-      return { ...house, members };
-    });
-    res.json(housesWithMembers);
+    const limit = parseInt(req.query.limit as string) || 200; // Efficient default for list summary views
+    const offset = parseInt(req.query.offset as string) || 0;
+    
+    // Efficiently get houses with their member counts using a single query
+    const houses = db.prepare(`
+      SELECT h.*, COUNT(m.id) as member_count 
+      FROM houses h 
+      LEFT JOIN members m ON h.id = m.house_id 
+      GROUP BY h.id 
+      ORDER BY h.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(limit, offset) as any[];
+
+    // Since we now only send the count, we save a lot of bandwidth and query time
+    res.json(houses.map(h => ({ ...h, members: new Array(h.member_count) }))); 
+  });
+
+  // New endpoint to fetch full member details for a specific house when selected
+  app.get("/api/houses/:id/members", (req, res) => {
+    const { id } = req.params;
+    const members = db.prepare("SELECT * FROM members WHERE house_id = ?").all(id);
+    res.json(members);
   });
 
   app.post("/api/survey", (req, res) => {
@@ -139,9 +209,9 @@ async function startServer() {
 
     const transaction = db.transaction(() => {
       const houseInsert = db.prepare(`
-        INSERT INTO houses (house_details, area)
-        VALUES (?, ?)
-      `).run(house.house_details, house.area);
+        INSERT INTO houses (house_details, area, ration_card_type)
+        VALUES (?, ?, ?)
+      `).run(house.house_details, house.area, house.ration_card_type);
 
       const houseId = houseInsert.lastInsertRowid;
 
@@ -178,14 +248,35 @@ async function startServer() {
     }
   });
 
+  app.get("/api/export", (_req, res) => {
+    const houses = db.prepare("SELECT * FROM houses ORDER BY created_at DESC").all();
+    const housesWithMembers = houses.map((house: any) => {
+      const members = db.prepare("SELECT * FROM members WHERE house_id = ?").all(house.id);
+      return { ...house, members };
+    });
+    res.json(housesWithMembers);
+  });
+
+  app.get("/api/suggestions", (_req, res) => {
+    const areas = db.prepare("SELECT area FROM houses WHERE area IS NOT NULL AND area != '' GROUP BY area ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.area);
+    const occupations = db.prepare("SELECT occupation FROM members WHERE occupation IS NOT NULL AND occupation != '' GROUP BY occupation ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.occupation);
+    const educations = db.prepare("SELECT education FROM members WHERE education IS NOT NULL AND education != '' GROUP BY education ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.education);
+    const memberships = db.prepare("SELECT membership_details FROM members WHERE membership_details IS NOT NULL AND membership_details != '' GROUP BY membership_details ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.membership_details);
+    const blood_groups = db.prepare("SELECT blood_group FROM members WHERE blood_group IS NOT NULL AND blood_group != '' GROUP BY blood_group ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.blood_group);
+    const names = db.prepare("SELECT name FROM members WHERE name IS NOT NULL AND name != '' GROUP BY name ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.name);
+    const other_details = db.prepare("SELECT other_details FROM members WHERE other_details IS NOT NULL AND other_details != '' GROUP BY other_details ORDER BY MAX(id) DESC LIMIT 50").all().map((r: any) => r.other_details);
+
+    res.json({ areas, occupations, educations, memberships, blood_groups, names, other_details });
+  });
+
 
 
   // House & Member Management Routes
   app.put("/api/houses/:id", (req, res) => {
     const { id } = req.params;
-    const { house_details, area } = req.body;
+    const { house_details, area, ration_card_type } = req.body;
     try {
-      db.prepare("UPDATE houses SET house_details = ?, area = ? WHERE id = ?").run(house_details, area, id);
+      db.prepare("UPDATE houses SET house_details = ?, area = ?, ration_card_type = ? WHERE id = ?").run(house_details, area, ration_card_type, id);
       res.json({ success: true });
     } catch (error) {
       console.error(error);
@@ -205,6 +296,28 @@ async function startServer() {
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Failed to delete house" });
+    }
+  });
+
+  app.post("/api/houses/:id/members", (req, res) => {
+    const { id } = req.params;
+    const m = req.body;
+    try {
+      db.prepare(`
+        INSERT INTO members (
+          house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+      `).run(
+        id, m.name, m.gender, m.age, m.occupation, m.education,
+        m.ration_card_type || '', m.membership_details, m.blood_group,
+        m.phone, m.other_details
+      );
+      res.json({ success: true });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Failed to add member" });
     }
   });
 
@@ -259,7 +372,7 @@ async function startServer() {
   });
 
   // Seed fake data endpoint
-  app.post("/api/seed-data", (req, res) => {
+  app.post("/api/seed-data", (_req, res) => {
     try {
       const existingHouses = db.prepare("SELECT COUNT(*) as count FROM houses").get() as { count: number };
       if (existingHouses.count > 0) {
@@ -368,7 +481,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/download-project", (req, res) => {
+  app.get("/api/download-project", (_req, res) => {
     try {
       const zip = new AdmZip();
       const rootDir = __dirname;
@@ -420,7 +533,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
   }

@@ -1,23 +1,40 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SNDP Survey Dashboard</title>
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#10b981">
-    <link rel="apple-touch-icon" href="/icon.png">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <link rel="icon" type="image/png" href="/icon.png?v=6" />
+    <link rel="apple-touch-icon" href="/icon.png?v=6" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#10b981" />
+    <meta name="description" content="SNDP Shakha 1176 Pirappancode Family Survey Dashboard" />
+    <title>SNDP Survey - Shakha 1176</title>
     <script>
+      // Unregister stale service workers and clear old caches on load
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js');
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(r) { r.unregister(); });
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          names.forEach(function(n) { caches.delete(n); });
         });
       }
     </script>
+  </head>
+  <body>
+    <div id="root">
+      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f8fafc;font-family:system-ui,sans-serif;">
+        <div style="text-align:center;color:#64748b;">
+          <div style="width:48px;height:48px;border:4px solid #10b981;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 20px;"></div>
+          <p style="font-size:1rem;">Loading SNDP Survey...</p>
+        </div>
+      </div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -1,0 +1,10 @@
+# .dockerignore
+node_modules
+dist
+.git
+.env
+survey.db
+survey.db-journal
+project.zip
+*.log
+.vscode
