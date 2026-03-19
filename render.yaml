@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sndp-survey-project
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npx tsx server.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SQLITE_DB_PATH
+        value: /opt/render/project/src/data/survey.db
+    disk:
+      name: survey_data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
