@@ -11,16 +11,18 @@ import bcrypt from "bcryptjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- Turso / libsql Client Setup ---
-const db = createClient(
-  process.env.TURSO_DATABASE_URL
-    ? {
-        url: process.env.TURSO_DATABASE_URL,
-        authToken: process.env.TURSO_AUTH_TOKEN,
-      }
-    : {
-        url: "file:survey.db",
-      }
-);
+const getDbUrl = () => {
+  if (process.env.TURSO_DATABASE_URL) return process.env.TURSO_DATABASE_URL;
+  if (process.env.SQLITE_DB_PATH) return `file:${process.env.SQLITE_DB_PATH}`;
+  // Default Render persistent path if directory exists
+  if (fs.existsSync("/var/lib/survey-data")) return "file:/var/lib/survey-data/survey.db";
+  return "file:survey.db";
+};
+
+const db = createClient({
+  url: getDbUrl(),
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
 
 const app = express();
 app.use(express.json());
@@ -79,6 +81,9 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_members_house_id ON members(house_id);
     CREATE INDEX IF NOT EXISTS idx_houses_area ON houses(area);
     CREATE INDEX IF NOT EXISTS idx_members_name ON members(name);
+    CREATE INDEX IF NOT EXISTS idx_houses_ration ON houses(ration_card_type);
+    CREATE INDEX IF NOT EXISTS idx_members_gender ON members(gender);
+    CREATE INDEX IF NOT EXISTS idx_members_age ON members(age);
   `);
 
   const adminRes = await db.execute("SELECT * FROM users WHERE username = 'admin'");
@@ -245,41 +250,48 @@ app.post("/api/survey", async (req, res) => {
     return res.status(400).json({ error: "Invalid survey data" });
   }
 
+  // Use a transaction for high speed and data integrity
   try {
-    // 1. Insert House
-    const houseRes = await db.execute({
-      sql: "INSERT INTO houses (house_details, area, ration_card_type) VALUES (?, ?, ?)",
-      args: [house.house_details || "", house.area || "", house.ration_card_type || "Other"],
-    });
-    
-    // LibSQL / Turso returns lastInsertRowid either as a property or in a result set
-    const houseId = houseRes.lastInsertRowid;
-    if (!houseId && houseId !== 0) {
-      throw new Error("Failed to retrieve house ID after insertion");
-    }
-
-    // 2. Insert Members
-    for (const member of members) {
-      await db.execute({
-        sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          houseId, 
-          member.name, 
-          member.gender || "Male", 
-          parseInt(member.age) || 0, 
-          member.occupation || "", 
-          member.education || "", 
-          member.ration_card_type || house.ration_card_type || "Other", 
-          member.membership_details || "", 
-          member.blood_group || "", 
-          member.phone || "", 
-          member.other_details || ""
-        ],
+    const txn = await db.transaction("write");
+    try {
+      // 1. Insert House
+      const houseRes = await txn.execute({
+        sql: "INSERT INTO houses (house_details, area, ration_card_type) VALUES (?, ?, ?)",
+        args: [house.house_details || "", house.area || "", house.ration_card_type || "Other"],
       });
+      
+      const houseId = houseRes.lastInsertRowid;
+      if (!houseId && houseId !== 0) {
+        throw new Error("Failed to retrieve house ID");
+      }
+
+      // 2. Insert Members
+      for (const member of members) {
+        await txn.execute({
+          sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            houseId, 
+            member.name, 
+            member.gender || "Male", 
+            parseInt(member.age) || 0, 
+            member.occupation || "", 
+            member.education || "", 
+            member.ration_card_type || house.ration_card_type || "Other", 
+            member.membership_details || "", 
+            member.blood_group || "", 
+            member.phone || "", 
+            member.other_details || ""
+          ],
+        });
+      }
+      
+      await txn.commit();
+      res.json({ success: true, id: houseId.toString() });
+    } catch (err: any) {
+      await txn.rollback();
+      throw err;
     }
-    
-    res.json({ success: true, id: houseId.toString() });
   } catch (error: any) {
     console.error("Survey submission failure:", error);
     res.status(500).json({ error: "Database failure: " + (error.message || "Unknown error") });
