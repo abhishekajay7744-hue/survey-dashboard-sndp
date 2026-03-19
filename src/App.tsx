@@ -1027,36 +1027,29 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto w-full scroll-smooth bg-[#f8fafc]">
 
-        <header className="bg-white/90 backdrop-blur-xl border-b border-slate-200/60 p-4 md:p-6 flex justify-between items-center sticky top-0 z-40 shadow-sm shadow-slate-200/50">
-          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 flex-1">
-            <div className="flex items-center gap-2">
-              {!isDesktop && (
-                <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg shrink-0">
-                  <Menu size={24} />
-                </button>
-              )}
-              <div className="flex flex-col">
-                <h1 className="text-xs md:text-sm font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">Survey Management</h1>
-                <h2 className="text-lg md:text-2xl font-black bg-gradient-to-r from-slate-900 via-emerald-800 to-emerald-600 bg-clip-text text-transparent truncate line-clamp-1">
-                  SNDP SHAKHA 1176
-                </h2>
-              </div>
-            </div>
-            {activeTab !== 'dashboard' && (
-              <span className="hidden md:inline px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-sm font-bold shadow-sm whitespace-nowrap">
-                {activeTab === 'survey' ? 'Data Entry' : activeTab === 'records' ? 'Survey Records' : 'Account Settings'}
-              </span>
+        <header className="bg-white/90 backdrop-blur-xl border-b border-slate-200/60 px-4 py-3 flex justify-between items-center sticky top-0 z-40 shadow-sm shadow-slate-200/50">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {!isDesktop && (
+              <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-slate-100 rounded-lg shrink-0">
+                <Menu size={22} />
+              </button>
             )}
-          </div>
-            <div className="flex items-center gap-3">
-              <div className="flex flex-col items-end hidden sm:flex">
-                <span className="text-sm font-bold text-slate-900">{user.username}</span>
-                <span className="text-[10px] text-slate-500 font-medium">Administrator</span>
-              </div>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm md:text-base shadow-md shadow-emerald-100">
-                {user.username[0].toUpperCase()}
-              </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none">Survey Management</span>
+              <h1 className="text-base md:text-xl font-black bg-gradient-to-r from-slate-900 via-emerald-800 to-emerald-600 bg-clip-text text-transparent truncate">
+                SNDP SHAKHA 1176
+              </h1>
             </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-col items-end hidden sm:flex">
+              <span className="text-sm font-bold text-slate-900">{user.username}</span>
+              <span className="text-[10px] text-slate-500 font-medium">Administrator</span>
+            </div>
+            <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-emerald-100 shrink-0">
+              {user.username[0].toUpperCase()}
+            </div>
+          </div>
         </header>
 
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
@@ -1065,38 +1058,22 @@ export default function App() {
               {/* Dashboard Actions */}
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-[2rem] blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-                <div className="relative bg-slate-900 p-8 md:p-12 rounded-[2rem] shadow-2xl border border-slate-800 overflow-hidden">
+                <div className="relative bg-slate-900 p-6 md:p-12 rounded-[2rem] shadow-2xl border border-slate-800 overflow-hidden">
                   <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-[80px]"></div>
-                  <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/5 rounded-full translate-y-1/2 -translate-x-1/2 blur-[60px]"></div>
-                  
-                  <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-                    <div className="max-w-3xl">
-                      <div className="flex items-center gap-3 mb-6">
-                        <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded-full">
-                          System Active
-                        </span>
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                      </div>
-                      <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter mb-4">
-                        NAMASKARAM <span className="text-emerald-500">ADMIN</span>
-                      </h2>
-                      <p className="text-slate-400 text-lg md:text-xl leading-relaxed font-medium max-w-2xl">
-                        Welcome to your specialized Control Center. Monitoring community growth and demographics for 
-                        <span className="text-white ml-2">Shakha 1176 Pirappancode.</span>
-                      </p>
+                  <div className="relative z-10 flex flex-col gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-widest rounded-full">
+                        System Active
+                      </span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                     </div>
-                    
-                    <div className="hidden lg:block shrink-0">
-                      <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-2xl flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                          <Activity size={24} />
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">System Health</p>
-                          <p className="text-white font-bold">Optimal Performance</p>
-                        </div>
-                      </div>
-                    </div>
+                    <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tighter">
+                      NAMASKARAM <span className="text-emerald-500">ADMIN</span>
+                    </h2>
+                    <p className="text-slate-400 text-sm md:text-lg leading-relaxed font-medium">
+                      Welcome to your Control Center.
+                      <span className="text-white ml-1">Shakha 1176 Pirappancode.</span>
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1480,44 +1457,40 @@ export default function App() {
           {activeTab === 'records' && (
             <div className="space-y-6">
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="flex-1 w-full">
-                    <h3 className="text-lg font-semibold mb-2">All Survey Records</h3>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <input
-                        type="text"
-                        placeholder="Search by name, house, area, phone, ration card..."
-                        value={houseSearch}
-                        onChange={(e) => setHouseSearch(e.target.value)}
-                        className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
-                      />
-                      {houseSearch && (
-                        <button
-                          onClick={() => setHouseSearch('')}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
-                    </div>
-                    {houseSearch && (
-                      <p className="text-xs text-slate-500 mt-2">
-                        Showing {filteredAndSortedHouses.length} results for "{houseSearch}"
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2 w-full md:w-auto shrink-0">
+                <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col gap-3">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base md:text-lg font-semibold">All Survey Records</h3>
                     <button
                       onClick={generateAllRecordsPDF}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors shrink-0"
                     >
                       <Download size={14} />
-                      Download All Records
+                      <span className="hidden sm:inline">Download All Records</span>
+                      <span className="sm:hidden">PDF</span>
                     </button>
                   </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search by name, house, area..."
+                      value={houseSearch}
+                      onChange={(e) => setHouseSearch(e.target.value)}
+                      className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                    />
+                    {houseSearch && (
+                      <button onClick={() => setHouseSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {houseSearch && (
+                    <p className="text-xs text-slate-500">
+                      {filteredAndSortedHouses.length} results for "{houseSearch}"
+                    </p>
+                  )}
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
                   <table className="w-full text-left min-w-[600px]">
                     <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                       <tr>
