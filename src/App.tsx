@@ -313,8 +313,13 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
+    setLoginLoading(true);
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
@@ -328,10 +333,12 @@ export default function App() {
         fetchHouses();
         fetchSuggestions();
       } else {
-        alert(data.error);
+        setLoginError(data.error || 'Invalid username or password');
       }
     } catch (err) {
-      alert('Login failed');
+      setLoginError('Cannot connect to server. Please make sure the server is running.');
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -891,32 +898,33 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4 sm:p-6 relative overflow-hidden">
         {/* Background Decorative Elements */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px]"></div>
         
         <div className="w-full max-w-[440px] relative z-10">
-          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-10 shadow-2xl shadow-black/50">
-            <div className="flex flex-col items-center mb-10">
-              <div className="bg-emerald-500 w-16 h-16 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20 rotate-3 transition-transform hover:rotate-0 duration-300">
-                <LayoutDashboard size={32} className="text-white" />
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 shadow-2xl shadow-black/50">
+            <div className="flex flex-col items-center mb-7 sm:mb-10">
+              <div className="bg-emerald-500 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-4 sm:mb-6 shadow-lg shadow-emerald-500/20 rotate-3 transition-transform hover:rotate-0 duration-300">
+                <LayoutDashboard size={28} className="text-white" />
               </div>
-              <h1 className="text-3xl font-black text-white tracking-tight text-center">SNDP SURVEY</h1>
-              <p className="text-slate-400 text-sm mt-3 font-medium uppercase tracking-widest">Digital Administration Portal</p>
-              <div className="w-12 h-1 bg-emerald-500 rounded-full mt-4"></div>
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight text-center">SNDP SURVEY</h1>
+              <p className="text-slate-400 text-xs sm:text-sm mt-2 sm:mt-3 font-medium uppercase tracking-widest text-center">Digital Administration Portal</p>
+              <div className="w-10 h-1 bg-emerald-500 rounded-full mt-3 sm:mt-4"></div>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-4">
                 <div className="group">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Identity</label>
                   <input
                     type="text"
                     required
+                    autoComplete="username"
                     value={loginForm.username}
-                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-                    className="w-full bg-slate-800/50 border border-slate-700 text-white px-5 py-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all placeholder:text-slate-600"
+                    onChange={(e) => { setLoginForm({ ...loginForm, username: e.target.value }); setLoginError(''); }}
+                    className="w-full bg-slate-800/50 border border-slate-700 text-white px-4 py-3.5 sm:px-5 sm:py-4 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all placeholder:text-slate-600 text-base"
                     placeholder="Username"
                   />
                 </div>
@@ -926,9 +934,10 @@ export default function App() {
                     <input
                       type={showPwd ? "text" : "password"}
                       required
+                      autoComplete="current-password"
                       value={loginForm.password}
-                      onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                      className="w-full bg-slate-800/50 border border-slate-700 text-white px-5 py-4 pr-12 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all placeholder:text-slate-600"
+                      onChange={(e) => { setLoginForm({ ...loginForm, password: e.target.value }); setLoginError(''); }}
+                      className="w-full bg-slate-800/50 border border-slate-700 text-white px-4 py-3.5 sm:px-5 sm:py-4 pr-12 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all placeholder:text-slate-600 text-base"
                       placeholder="••••••••"
                     />
                     <button
@@ -942,16 +951,33 @@ export default function App() {
                 </div>
               </div>
 
+              {loginError && (
+                <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
               <button
                 type="submit"
-                className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-400 active:scale-[0.98] transition-all shadow-xl shadow-emerald-900/20 mt-4 flex items-center justify-center gap-2 group"
+                disabled={loginLoading}
+                className="w-full py-3.5 sm:py-4 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-400 active:scale-[0.98] transition-all shadow-xl shadow-emerald-900/20 flex items-center justify-center gap-2 group disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Access Dashboard
-                <PlusCircle size={18} className="rotate-45 group-hover:rotate-90 transition-transform" />
+                {loginLoading ? (
+                  <>
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    Signing In...
+                  </>
+                ) : (
+                  <>
+                    Access Dashboard
+                    <PlusCircle size={18} className="rotate-45 group-hover:rotate-90 transition-transform" />
+                  </>
+                )}
               </button>
             </form>
 
-            <p className="text-center text-slate-500 text-xs mt-8 font-medium">
+            <p className="text-center text-slate-500 text-xs mt-6 sm:mt-8 font-medium">
               Shakha 1176 Pirappancode • Official Community Use Only
             </p>
           </div>
@@ -973,7 +999,7 @@ export default function App() {
       {/* Sidebar */}
       <aside className={cn(
         "bg-slate-900 text-white transition-all duration-300 flex flex-col z-50",
-        isDesktop ? (isSidebarOpen ? "w-64" : "w-20") : (isSidebarOpen ? "fixed inset-y-0 left-0 w-64" : "fixed inset-y-0 -left-64 w-64")
+        isDesktop ? (isSidebarOpen ? "w-64" : "w-20") : (isSidebarOpen ? "fixed inset-y-0 left-0 w-72" : "fixed inset-y-0 -left-72 w-72")
       )}>
         <div className="p-6 flex items-center gap-3 border-b border-slate-800">
           <div className="bg-emerald-500 p-2 rounded-lg">
@@ -1025,7 +1051,7 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto w-full scroll-smooth bg-[#f8fafc]">
+      <main className="flex-1 overflow-y-auto w-full scroll-smooth bg-[#f8fafc] pb-16 md:pb-0">
 
         <header className="bg-white/90 backdrop-blur-xl border-b border-slate-200/60 px-4 py-3 flex justify-between items-center sticky top-0 z-40 shadow-sm shadow-slate-200/50">
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1695,6 +1721,39 @@ export default function App() {
         </div>
       </main>
 
+      {/* Mobile Bottom Navigation */}
+      {!isDesktop && (
+        <nav className="fixed bottom-0 inset-x-0 z-40 bg-slate-900 border-t border-slate-800 flex items-center justify-around px-2 py-1 safe-area-bottom">
+          {[
+            { tab: 'dashboard' as Tab, icon: <LayoutDashboard size={20} />, label: 'Home' },
+            { tab: 'survey' as Tab, icon: <PlusCircle size={20} />, label: 'Survey' },
+            { tab: 'records' as Tab, icon: <Home size={20} />, label: 'Records' },
+            { tab: 'settings' as Tab, icon: <Users size={20} />, label: 'Settings' },
+          ].map(({ tab, icon, label }) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                'flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl transition-all duration-200',
+                activeTab === tab
+                  ? 'text-emerald-400'
+                  : 'text-slate-500 hover:text-slate-300'
+              )}
+            >
+              {icon}
+              <span className="text-[10px] font-semibold">{label}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => setUser(null)}
+            className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl text-slate-500 hover:text-red-400 transition-colors"
+          >
+            <LogOut size={20} />
+            <span className="text-[10px] font-semibold">Logout</span>
+          </button>
+        </nav>
+      )}
+
       {/* Confirmation Modal */}
       {
         confirmModal?.open && (
@@ -1733,11 +1792,11 @@ export default function App() {
 
       {/* House Details Modal */}
       {selectedHouse && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-hidden" onClick={() => setSelectedHouse(null)}>
-          <div className="bg-white rounded-[2.5rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
-            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-end sm:items-center justify-center sm:p-4 overflow-hidden" onClick={() => setSelectedHouse(null)}>
+          <div className="bg-white rounded-t-[2rem] sm:rounded-[2.5rem] shadow-[0_35px_60px_-15px_rgba(0,0,0,0.3)] w-full max-w-5xl max-h-[92vh] sm:max-h-[90vh] overflow-hidden flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="p-4 sm:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">House Details</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">House Details</h3>
                 <p className="text-sm text-slate-500">{selectedHouse.area}</p>
               </div>
               <button
@@ -1749,7 +1808,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-8 flex-1 overflow-y-auto space-y-8">
+            <div className="p-4 sm:p-8 flex-1 overflow-y-auto space-y-6 sm:space-y-8">
               <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 relative group">
                 <div className="flex justify-between items-start mb-2">
                   <h4 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Address & Details</h4>
