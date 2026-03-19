@@ -443,10 +443,13 @@ export default function App() {
         fetchHouses();
         fetchSuggestions();
         setActiveTab('dashboard');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert('Failed to save data: ' + (errData.error || 'Server error occurred'));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to save data');
+      alert('Network error: ' + (err.message || 'Check your connection'));
     }
   };
 
