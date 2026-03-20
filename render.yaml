@@ -14,3 +14,7 @@ services:
         value: production
       - key: SQLITE_DB_PATH
         value: /var/lib/survey-data/survey.db
+      - key: TURSO_DATABASE_URL
+        sync: false # Set this in the Render Dashboard for security
+      - key: TURSO_AUTH_TOKEN
+        sync: false # Set this in the Render Dashboard for security
