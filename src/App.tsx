@@ -385,9 +385,15 @@ export default function App() {
     try {
       const res = await fetch('/api/houses');
       const data = await res.json();
-      setHouses(data);
+      if (Array.isArray(data)) {
+        setHouses(data);
+      } else {
+        console.error("Houses data is not an array:", data);
+        setHouses([]);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Houses fetch error:", err);
+      setHouses([]);
     }
   };
 
