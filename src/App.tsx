@@ -1492,15 +1492,7 @@ export default function App() {
                             <option>AB-</option>
                           </select>
                         </FormField>
-                        <FormField label="Mobile Number">
-                          <input
-                            type="tel"
-                            value={member.phone}
-                            onChange={(e) => handleMemberChange(index, 'phone', e.target.value)}
-                            className="form-input"
-                          />
-                        </FormField>
-                        <FormField label="Other Details" className="md:col-span-2 lg:col-span-3">
+                        <FormField label="Other Details" className="md:col-span-3 lg:col-span-2">
                           <AutocompleteInput
                             value={member.other_details}
                             onChange={(val) => handleMemberChange(index, 'other_details', val)}
@@ -2036,12 +2028,6 @@ export default function App() {
                               className="form-input"
                             />
                           </FormField>
-                          <FormField label="Phone">
-                            <input type="text" className="form-input"
-                              value={memberEditForm.phone || ''}
-                              onChange={(e) => setMemberEditForm(prev => ({ ...prev!, phone: e.target.value }))}
-                            />
-                          </FormField>
                           <FormField label="Membership">
                             <AutocompleteInput
                               value={memberEditForm.membership_details || ''}
@@ -2060,7 +2046,7 @@ export default function App() {
                               <option>O+</option><option>O-</option><option>AB+</option><option>AB-</option>
                             </select>
                           </FormField>
-                          <FormField label="Other Details" className="md:col-span-2">
+                          <FormField label="Other Details" className="md:col-span-3">
                             <AutocompleteInput
                               value={memberEditForm.other_details || ''}
                               onChange={(val) => setMemberEditForm(prev => ({ ...prev!, other_details: val }))}
@@ -2121,14 +2107,6 @@ export default function App() {
                                 suggestions={Array.from(new Set([...(globalSuggestions.occupations || []), ...(globalSuggestions.educations || [])]))}
                                 placeholder="e.g. Teacher, B.Ed, or Student"
                                 className="form-input"
-                              />
-                            </FormField>
-                            <FormField label="Phone">
-                              <input
-                                type="text"
-                                className="form-input"
-                                value={memberEditForm?.phone}
-                                onChange={(e) => setMemberEditForm({ ...memberEditForm!, phone: e.target.value })}
                               />
                             </FormField>
 
@@ -2280,11 +2258,85 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
         });
         setRecords(rows);
         setStatus('preview');
+      } else if (ext === 'pdf') {
+        const buffer = await file.arrayBuffer();
+        const pdfjsLib = await import('pdfjs-dist');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+        // Extract all text items with position info
+        const allItems: { str: string; x: number; y: number; page: number }[] = [];
+        for (let p = 1; p <= pdf.numPages; p++) {
+          const page = await pdf.getPage(p);
+          const vp = page.getViewport({ scale: 1 });
+          const tc = await page.getTextContent();
+          for (const item of tc.items as any[]) {
+            if (item.str?.trim()) {
+              allItems.push({
+                str: item.str.trim(),
+                x: Math.round(item.transform[4]),
+                y: Math.round(vp.height - item.transform[5]),
+                page: p,
+              });
+            }
+          }
+        }
+        // Sort: page → y (top-to-bottom) → x (left-to-right)
+        allItems.sort((a, b) => a.page !== b.page ? a.page - b.page : Math.abs(a.y - b.y) > 4 ? a.y - b.y : a.x - b.x);
+        // Group into rows by Y proximity (within 5 units = same row)
+        const pdfRows: string[][] = [];
+        let rowBuf: typeof allItems = [];
+        for (const item of allItems) {
+          if (rowBuf.length === 0 || (item.page === rowBuf[0].page && Math.abs(item.y - rowBuf[0].y) <= 5)) {
+            rowBuf.push(item);
+          } else {
+            pdfRows.push(rowBuf.sort((a, b) => a.x - b.x).map(i => i.str));
+            rowBuf = [item];
+          }
+        }
+        if (rowBuf.length) pdfRows.push(rowBuf.sort((a, b) => a.x - b.x).map(i => i.str));
+        // Parse house records from rows
+        const parsed: any[] = [];
+        let house: any = null;
+        let readingMembers = false;
+        for (const row of pdfRows) {
+          const line = row.join(' ');
+          const houseMatch = line.match(/HOUSE:\s*(.+)/i);
+          if (houseMatch) {
+            if (house) parsed.push(house);
+            house = { house_details: houseMatch[1].trim(), area: '', members: [] };
+            readingMembers = false;
+          } else if (house && /^name$/i.test(row[0]) && row.some(r => /^gen$/i.test(r))) {
+            readingMembers = true;
+          } else if (house && readingMembers && row.length >= 3 && !/^(official|page|sndp|report)/i.test(row[0])) {
+            const [name, gen, age, jobEdu = '', membership = '', blood = '', phone = '', ...rest] = row;
+            if (name && name.length > 1 && !/^\d+$/.test(name)) {
+              house.members.push({
+                name,
+                gender: gen === 'M' ? 'Male' : gen === 'F' ? 'Female' : 'Male',
+                age: parseInt(age) || 0,
+                occupation: jobEdu !== '-' ? jobEdu : '',
+                education: '',
+                membership_details: membership !== '-' ? membership : '',
+                blood_group: blood !== '-' ? blood : '',
+                phone: phone !== '-' ? phone : '',
+                other_details: rest.join(' ') !== '-' ? rest.join(' ') : '',
+              });
+            }
+          }
+        }
+        if (house) parsed.push(house);
+        if (parsed.length === 0) {
+          setError('No house records found in this PDF. Make sure it was exported using "Download All Records" from this app.');
+          setStatus('idle');
+        } else {
+          setRecords(parsed);
+          setStatus('preview');
+        }
       } else if (ext === 'xlsx' || ext === 'xls') {
         setError('For Excel files (.xlsx/.xls), please first export the file as CSV from Excel (File → Save As → CSV), then upload that CSV here.');
         setStatus('idle');
       } else {
-        setError('Unsupported file. Please upload a .json or .csv file.');
+        setError('Unsupported file. Please upload a .json, .csv, or .pdf file.');
         setStatus('idle');
       }
     } catch (e: any) {
@@ -2360,9 +2412,9 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
               </div>
               <div className="text-center">
                 <p className="font-bold text-slate-800 text-lg">Drop file here or click to browse</p>
-                <p className="text-slate-500 text-sm mt-1">Supports <strong>.json</strong> and <strong>.csv</strong> files</p>
+                <p className="text-slate-500 text-sm mt-1">Supports <strong>.json</strong>, <strong>.csv</strong> and <strong>.pdf</strong> (app export) files</p>
               </div>
-              <input ref={fileRef} type="file" accept=".json,.csv,.xlsx,.xls" className="hidden"
+              <input ref={fileRef} type="file" accept=".json,.csv,.xlsx,.xls,.pdf" className="hidden"
                 onChange={e => { if (e.target.files?.[0]) parseFile(e.target.files[0]); }}
               />
             </label>
@@ -2395,7 +2447,7 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
     ]
   }
 ]`}</pre>
-              <p className="text-xs text-slate-500 mt-3">💡 For CSV, each row should be one house. Member data in CSV is limited — use JSON for full member details.</p>
+              <p className="text-xs text-slate-500 mt-3">💡 For CSV, each row should be one house. For full member details, use <strong>JSON</strong>. To restore from a printed backup, upload the <strong>PDF</strong> generated by "Download All Records".</p>
             </div>
 
             {/* Preview */}
