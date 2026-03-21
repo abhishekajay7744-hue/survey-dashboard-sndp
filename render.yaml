@@ -3,7 +3,7 @@ services:
     name: sndp-survey-project
     env: node
     plan: standard # Required for persistent disks
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs && npm run build
     startCommand: npx tsx server.ts
     disk:
       name: survey-data
