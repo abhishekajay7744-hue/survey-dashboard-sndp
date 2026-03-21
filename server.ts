@@ -55,6 +55,7 @@ async function initDb() {
       house_details TEXT,
       area TEXT,
       ration_card_type TEXT,
+      phone_numbers TEXT DEFAULT '[]',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -90,6 +91,18 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_members_gender ON members(gender);
     CREATE INDEX IF NOT EXISTS idx_members_age ON members(age);
   `);
+
+  // Migration: add phone_numbers column to existing houses table if missing
+  try {
+    const colCheck = await db.execute("PRAGMA table_info(houses)");
+    const cols = colCheck.rows.map((r: any) => r.name || r[1] || "");
+    if (!cols.includes("phone_numbers")) {
+      await db.execute("ALTER TABLE houses ADD COLUMN phone_numbers TEXT DEFAULT '[]'");
+      console.log("Migration: added phone_numbers column to houses.");
+    }
+  } catch(e) {
+    console.error("Migration for phone_numbers failed:", e);
+  }
 
   console.log("Database tables initialized.");
   const adminRes = await db.execute("SELECT * FROM users WHERE username = 'admin'");
@@ -229,10 +242,10 @@ app.get("/api/houses", async (req, res) => {
       house_details: h.house_details ?? h[1],
       area: h.area ?? h[2],
       ration_card_type: h.ration_card_type ?? h[3],
-      created_at: h.created_at ?? h[4],
-      // Map names to member objects so the frontend search works
+      phone_numbers: JSON.parse((h.phone_numbers ?? h[4] ?? '[]') || '[]'),
+      created_at: h.created_at ?? h[5],
       members: (h.member_names || "").split(',').filter(Boolean).map((name: string) => ({ name })),
-      member_count: Number(h.member_count ?? h[5] ?? 0)
+      member_count: Number(h.member_count ?? 0)
     }));
     res.json(houses);
   } catch (err) {
@@ -275,9 +288,12 @@ app.post("/api/survey", async (req, res) => {
 
   // Use batched execution to send all queries in a single extremely fast network round-trip.
   const statements = [];
+  const phoneNumbers = JSON.stringify(
+    Array.isArray(house.phone_numbers) ? house.phone_numbers.filter(Boolean) : []
+  );
   statements.push({
-    sql: "INSERT INTO houses (house_details, area, ration_card_type) VALUES (?, ?, ?)",
-    args: [house.house_details || "", house.area || "", house.ration_card_type || "Other"],
+    sql: "INSERT INTO houses (house_details, area, ration_card_type, phone_numbers) VALUES (?, ?, ?, ?)",
+    args: [house.house_details || "", house.area || "", house.ration_card_type || "Other", phoneNumbers],
   });
 
   for (const member of members) {
@@ -383,9 +399,13 @@ app.get("/api/suggestions", async (_req, res) => {
 
 app.put("/api/houses/:id", async (req, res) => {
   const { id } = req.params;
-  const { house_details, area, ration_card_type } = req.body;
+  const { house_details, area, ration_card_type, phone_numbers } = req.body;
   try {
-    await db.execute({ sql: "UPDATE houses SET house_details = ?, area = ?, ration_card_type = ? WHERE id = ?", args: [house_details, area, ration_card_type, id] });
+    const phones = JSON.stringify(Array.isArray(phone_numbers) ? phone_numbers.filter(Boolean) : []);
+    await db.execute({ 
+      sql: "UPDATE houses SET house_details = ?, area = ?, ration_card_type = ?, phone_numbers = ? WHERE id = ?", 
+      args: [house_details, area, ration_card_type, phones, id] 
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Update house failed" });
@@ -480,6 +500,50 @@ app.post("/api/seed-data", async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Seed failed" });
   }
+});
+
+// Bulk Import from file (CSV/JSON/XLS parsed by frontend)
+app.post("/api/import", async (req, res) => {
+  const { records } = req.body;
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ error: "No records provided." });
+  }
+
+  let imported = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const statements: any[] = [];
+    try {
+      const phoneNumbers = JSON.stringify(
+        Array.isArray(record.phone_numbers) ? record.phone_numbers.filter(Boolean) :
+        record.phone ? [record.phone] : []
+      );
+      statements.push({
+        sql: "INSERT INTO houses (house_details, area, ration_card_type, phone_numbers) VALUES (?, ?, ?, ?)",
+        args: [record.house_details || record.address || "", record.area || "", record.ration_card_type || "Other", phoneNumbers],
+      });
+
+      const members = Array.isArray(record.members) ? record.members : [];
+      for (const m of members) {
+        statements.push({
+          sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
+                VALUES (last_insert_rowid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [m.name || "", m.gender || "Male", Number(m.age) || 0, m.occupation || "", m.education || "", m.ration_card_type || record.ration_card_type || "Other", m.membership_details || "", m.blood_group || "", m.phone || "", m.other_details || ""],
+        });
+      }
+
+      if (statements.length > 0) {
+        await db.batch(statements, "write");
+        imported++;
+      }
+    } catch (e: any) {
+      errors.push(`Row ${i + 1}: ${e.message}`);
+    }
+  }
+
+  res.json({ success: true, imported, errors, total: records.length });
 });
 
 // Assets & SPA fallback
