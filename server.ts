@@ -13,38 +13,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // --- Turso / libsql Client Setup ---
 const getDbUrl = () => {
   if (process.env.TURSO_DATABASE_URL) {
-    console.log("Database: Using remote Turso URL");
+    console.log("Database: Using remote Turso URL from ENV");
     return process.env.TURSO_DATABASE_URL;
   }
   
-  if (process.env.SQLITE_DB_PATH) {
-    console.log(`Database: Using path from SQLITE_DB_PATH (${process.env.SQLITE_DB_PATH})`);
-    return `file:${process.env.SQLITE_DB_PATH}`;
-  }
-
-  // Paths for persistent volumes on Render / Docker
-  const persistentPaths = [
-    "/var/lib/survey-data/survey.db",
-    "/app/data/survey.db",
-    "data/survey.db"
-  ];
-
-  for (const p of persistentPaths) {
-    const fullPath = path.isAbsolute(p) ? p : path.join(__dirname, p);
-    const dir = path.dirname(fullPath);
-    if (!fs.existsSync(dir)) continue;
-    
-    console.log(`Database: Using persistent file path: ${fullPath}`);
-    return `file:${fullPath}`;
-  }
-
-  console.log("Database: Warning - Using ephemeral local file (data will be lost on restart)");
-  return "file:survey.db";
+  // Safe Cloud Fallback for instantly fast starts and permanent data across any platform
+  console.log("Database: Using secure Cloud connection (Turso Fallback)");
+  return "libsql://webapp-abhi7988.aws-ap-south-1.turso.io";
 };
 
 const db = createClient({
   url: getDbUrl(),
-  authToken: process.env.TURSO_AUTH_TOKEN,
+  authToken: process.env.TURSO_AUTH_TOKEN || "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzQwMDQwNDMsImlkIjoiMDE5ZDBhZTAtZmYwMS03YTkxLTg4NzktMWYwZGM1MDE4YWE3IiwicmlkIjoiMWEyYTg0ZjktNDNjYS00MjYxLWE0NDYtMGRlNTgwZmYxM2NlIn0.Km-ET7SPfjaUaJaA5ihzubBkm8nrW2JhMg4Jormz0-T8kmHcC1YRe8laaQTsQin7VIe5lfC9fR8WtlAvMAQzDw",
 });
 
 const app = express();
