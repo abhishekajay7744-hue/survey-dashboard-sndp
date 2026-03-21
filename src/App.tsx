@@ -2436,13 +2436,9 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
                   <button onClick={reset} className="px-6 py-3 border border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors">
                     Cancel
                   </button>
-                  <button onClick={handleImport} disabled={status === 'importing'}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-70">
-                    {status === 'importing' ? (
-                      <><span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>Importing...</>
-                    ) : (
-                      <><Upload size={18} />Import {records.length} Records</>
-                    )}
+                  <button onClick={handleImport}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                    <><Upload size={18} />Import {records.length} Records</>
                   </button>
                 </div>
               </div>

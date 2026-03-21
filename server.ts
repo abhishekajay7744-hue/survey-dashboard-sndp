@@ -12,6 +12,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- Turso / libsql Client Setup ---
 const getDbUrl = () => {
+  if (process.env.SQLITE_DB_PATH) {
+    console.log("Database: Using local SQLite persistent disk at " + process.env.SQLITE_DB_PATH);
+    return `file:${process.env.SQLITE_DB_PATH}`;
+  }
   if (process.env.TURSO_DATABASE_URL) {
     console.log("Database: Using remote Turso URL from ENV");
     return process.env.TURSO_DATABASE_URL;
@@ -570,8 +574,9 @@ export const start = async (port: number) => {
   });
 };
 
-// Auto-start if run directly
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js')) {
+// Auto-start if not running as a Vercel serverless function
+const isVercel = !!process.env.VERCEL;
+if (!isVercel) {
   const PORT = Number(process.env.PORT) || 3000;
   start(PORT).catch(console.error);
 }
