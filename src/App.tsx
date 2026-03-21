@@ -29,9 +29,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as pdfjsLib from 'pdfjs-dist';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -725,6 +723,35 @@ export default function App() {
     }
 
     doc.save('shakha_1176_survey_master_report.pdf');
+  };
+
+  const generateAllRecordsJSON = () => {
+    // Generate full dataset of all houses with their fully populated member lists
+    // The `houses` state only has members loaded on demand, so we need to fetch all or we use the `filteredAndSortedHouses` which might be missing data if not fully loaded.
+    // Wait, let's fetch the full export from the API.
+    const fetchFullExport = async () => {
+      try {
+        const res = await fetch('/api/houses');
+        const dbHouses = await res.json();
+        const exportData = await Promise.all(dbHouses.map(async (h: any) => {
+          const mRes = await fetch(`/api/houses/${h.id}/members`);
+          const members = await mRes.json();
+          return { ...h, members };
+        }));
+        
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "shakha_1176_backup.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+      } catch (e) {
+        console.error("Failed to generate JSON backup", e);
+        alert("Failed to create JSON backup. Please try again.");
+      }
+    };
+    fetchFullExport();
   };
 
 
@@ -1535,14 +1562,24 @@ export default function App() {
                 <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col gap-3">
                   <div className="flex justify-between items-center">
                     <h3 className="text-base md:text-lg font-semibold">All Survey Records</h3>
-                    <button
-                      onClick={generateAllRecordsPDF}
-                      className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors shrink-0"
-                    >
-                      <Download size={14} />
-                      <span className="hidden sm:inline">Download All Records</span>
-                      <span className="sm:hidden">PDF</span>
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={generateAllRecordsJSON}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg text-xs font-bold transition-colors shrink-0"
+                      >
+                        <Download size={14} />
+                        <span className="hidden sm:inline">Backup JSON</span>
+                        <span className="sm:hidden">JSON</span>
+                      </button>
+                      <button
+                        onClick={generateAllRecordsPDF}
+                        className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors shrink-0"
+                      >
+                        <Download size={14} />
+                        <span className="hidden sm:inline">Download Master List</span>
+                        <span className="sm:hidden">PDF</span>
+                      </button>
+                    </div>
                   </div>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -2257,83 +2294,11 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
         });
         setRecords(rows);
         setStatus('preview');
-      } else if (ext === 'pdf') {
-        const buffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-        // Extract all text items with position info
-        const allItems: { str: string; x: number; y: number; page: number }[] = [];
-        for (let p = 1; p <= pdf.numPages; p++) {
-          const page = await pdf.getPage(p);
-          const vp = page.getViewport({ scale: 1 });
-          const tc = await page.getTextContent();
-          for (const item of tc.items as any[]) {
-            if (item.str?.trim()) {
-              allItems.push({
-                str: item.str.trim(),
-                x: Math.round(item.transform[4]),
-                y: Math.round(vp.height - item.transform[5]),
-                page: p,
-              });
-            }
-          }
-        }
-        // Sort: page → y (top-to-bottom) → x (left-to-right)
-        allItems.sort((a, b) => a.page !== b.page ? a.page - b.page : Math.abs(a.y - b.y) > 4 ? a.y - b.y : a.x - b.x);
-        // Group into rows by Y proximity (within 5 units = same row)
-        const pdfRows: string[][] = [];
-        let rowBuf: typeof allItems = [];
-        for (const item of allItems) {
-          if (rowBuf.length === 0 || (item.page === rowBuf[0].page && Math.abs(item.y - rowBuf[0].y) <= 5)) {
-            rowBuf.push(item);
-          } else {
-            pdfRows.push(rowBuf.sort((a, b) => a.x - b.x).map(i => i.str));
-            rowBuf = [item];
-          }
-        }
-        if (rowBuf.length) pdfRows.push(rowBuf.sort((a, b) => a.x - b.x).map(i => i.str));
-        // Parse house records from rows
-        const parsed: any[] = [];
-        let house: any = null;
-        let readingMembers = false;
-        for (const row of pdfRows) {
-          const line = row.join(' ');
-          const houseMatch = line.match(/HOUSE:\s*(.+)/i);
-          if (houseMatch) {
-            if (house) parsed.push(house);
-            house = { house_details: houseMatch[1].trim(), area: '', members: [] };
-            readingMembers = false;
-          } else if (house && /^name$/i.test(row[0]) && row.some(r => /^gen$/i.test(r))) {
-            readingMembers = true;
-          } else if (house && readingMembers && row.length >= 3 && !/^(official|page|sndp|report)/i.test(row[0])) {
-            const [name, gen, age, jobEdu = '', membership = '', blood = '', ...rest] = row;
-            if (name && name.length > 1 && !/^\d+$/.test(name)) {
-              house.members.push({
-                name,
-                gender: gen === 'M' ? 'Male' : gen === 'F' ? 'Female' : 'Male',
-                age: parseInt(age) || 0,
-                occupation: jobEdu !== '-' ? jobEdu : '',
-                education: '',
-                membership_details: membership !== '-' ? membership : '',
-                blood_group: blood !== '-' ? blood : '',
-                phone: '',
-                other_details: rest.join(' ') !== '-' ? rest.join(' ') : '',
-              });
-            }
-          }
-        }
-        if (house) parsed.push(house);
-        if (parsed.length === 0) {
-          setError('No house records found in this PDF. Make sure it was exported using "Download All Records" from this app.');
-          setStatus('idle');
-        } else {
-          setRecords(parsed);
-          setStatus('preview');
-        }
       } else if (ext === 'xlsx' || ext === 'xls') {
         setError('For Excel files (.xlsx/.xls), please first export the file as CSV from Excel (File → Save As → CSV), then upload that CSV here.');
         setStatus('idle');
       } else {
-        setError('Unsupported file. Please upload a .json, .csv, or .pdf file.');
+        setError('Unsupported file. Please upload a .json or .csv file.');
         setStatus('idle');
       }
     } catch (e: any) {
@@ -2409,9 +2374,9 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
               </div>
               <div className="text-center">
                 <p className="font-bold text-slate-800 text-lg">Drop file here or click to browse</p>
-                <p className="text-slate-500 text-sm mt-1">Supports <strong>.json</strong>, <strong>.csv</strong> and <strong>.pdf</strong> (app export) files</p>
+                <p className="text-slate-500 text-sm mt-1">Supports <strong>.json</strong> and <strong>.csv</strong> files</p>
               </div>
-              <input ref={fileRef} type="file" accept=".json,.csv,.xlsx,.xls,.pdf" className="hidden"
+              <input ref={fileRef} type="file" accept=".json,.csv,.xlsx,.xls" className="hidden"
                 onChange={e => { if (e.target.files?.[0]) parseFile(e.target.files[0]); }}
               />
             </label>
@@ -2444,7 +2409,7 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
     ]
   }
 ]`}</pre>
-              <p className="text-xs text-slate-500 mt-3">💡 For CSV, each row should be one house. For full member details, use <strong>JSON</strong>. To restore from a printed backup, upload the <strong>PDF</strong> generated by "Download All Records".</p>
+              <p className="text-xs text-slate-500 mt-3">💡 For CSV, each row should be one house. For full member details, use <strong>JSON</strong>.</p>
             </div>
 
             {/* Preview */}
