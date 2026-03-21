@@ -698,11 +698,11 @@ export default function App() {
           startY: hStartY,
           margin: { left: 14, right: 14 },
           head: [
-            [{ content: `${globalHouseCount++}. HOUSE: ${h.house_details}`, colSpan: 8, styles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 10, cellPadding: 3 } }],
-            ["Name", "Gen", "Age", "Job / Education", "Membership", "Blood", "Phone", "Other Details"]
+            [{ content: `${globalHouseCount++}. HOUSE: ${h.house_details}`, colSpan: 7, styles: { fillColor: [248, 250, 252], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 10, cellPadding: 3 } }],
+            ["Name", "Gen", "Age", "Job / Education", "Membership", "Blood", "Other Details"]
           ],
           body: h.members?.map(m => [
-            m.name, m.gender[0], m.age || '-', m.occupation || m.education || '-', m.membership_details || '-', m.blood_group || '-', m.phone || '-', m.other_details || '-'
+            m.name, m.gender[0], m.age || '-', m.occupation || m.education || '-', m.membership_details || '-', m.blood_group || '-', m.other_details || '-'
           ]) || [],
           theme: 'grid',
           headStyles: { fillColor: [51, 65, 85], textColor: 255, fontSize: 8, cellPadding: 2, lineWidth: 0.1 },
@@ -2177,10 +2177,6 @@ export default function App() {
                               <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Blood Group</div>
                               <div className="text-slate-700 font-medium">{member.blood_group || 'Not Specified'}</div>
                             </div>
-                            <div>
-                              <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Contact</div>
-                              <div className="text-slate-700 font-medium">{member.phone || 'No Number'}</div>
-                            </div>
                             <div className="sm:col-span-2">
                               <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Job / Education</div>
                               <div className="text-slate-700 font-medium">{member.occupation || member.education || 'Not Specified'}</div>
@@ -2308,7 +2304,7 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
           } else if (house && /^name$/i.test(row[0]) && row.some(r => /^gen$/i.test(r))) {
             readingMembers = true;
           } else if (house && readingMembers && row.length >= 3 && !/^(official|page|sndp|report)/i.test(row[0])) {
-            const [name, gen, age, jobEdu = '', membership = '', blood = '', phone = '', ...rest] = row;
+            const [name, gen, age, jobEdu = '', membership = '', blood = '', ...rest] = row;
             if (name && name.length > 1 && !/^\d+$/.test(name)) {
               house.members.push({
                 name,
@@ -2318,7 +2314,7 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
                 education: '',
                 membership_details: membership !== '-' ? membership : '',
                 blood_group: blood !== '-' ? blood : '',
-                phone: phone !== '-' ? phone : '',
+                phone: '',
                 other_details: rest.join(' ') !== '-' ? rest.join(' ') : '',
               });
             }
