@@ -164,42 +164,49 @@ app.post("/api/change-password", async (req, res) => {
 
 app.get("/api/stats", async (_req, res) => {
   try {
-    const [totalHouses, totalMembers, aplCount, bplCount, maleCount, femaleCount, studentCount, childrenCount, adultsCount, seniorsCount] =
-      await Promise.all([
-        db.execute("SELECT COUNT(*) as count FROM houses"),
-        db.execute("SELECT COUNT(*) as count FROM members"),
-        db.execute("SELECT COUNT(*) as count FROM houses WHERE ration_card_type = 'APL'"),
-        db.execute("SELECT COUNT(*) as count FROM houses WHERE ration_card_type = 'BPL'"),
-        db.execute("SELECT COUNT(*) as count FROM members WHERE gender = 'Male'"),
-        db.execute("SELECT COUNT(*) as count FROM members WHERE gender = 'Female'"),
-        db.execute("SELECT COUNT(*) as count FROM members WHERE occupation LIKE '%student%' OR education LIKE '%student%'"),
-        db.execute("SELECT COUNT(*) as count FROM members WHERE age < 18"),
-        db.execute("SELECT COUNT(*) as count FROM members WHERE age >= 18 AND age < 60"),
-        db.execute("SELECT COUNT(*) as count FROM members WHERE age >= 60"),
-      ]);
+    const [housesRes, membersRes] = await Promise.all([
+      db.execute(`
+        SELECT 
+          COUNT(*) as totalHouses,
+          SUM(CASE WHEN ration_card_type = 'APL' THEN 1 ELSE 0 END) as aplCount,
+          SUM(CASE WHEN ration_card_type = 'BPL' THEN 1 ELSE 0 END) as bplCount
+        FROM houses
+      `),
+      db.execute(`
+        SELECT 
+          COUNT(*) as totalMembers,
+          SUM(CASE WHEN gender = 'Male' THEN 1 ELSE 0 END) as maleCount,
+          SUM(CASE WHEN gender = 'Female' THEN 1 ELSE 0 END) as femaleCount,
+          SUM(CASE WHEN occupation LIKE '%student%' OR education LIKE '%student%' THEN 1 ELSE 0 END) as studentCount,
+          SUM(CASE WHEN age < 18 THEN 1 ELSE 0 END) as childrenCount,
+          SUM(CASE WHEN age >= 18 AND age < 60 THEN 1 ELSE 0 END) as adultsCount,
+          SUM(CASE WHEN age >= 60 THEN 1 ELSE 0 END) as seniorsCount
+        FROM members
+      `)
+    ]);
 
-    const getVal = (res: any) => {
-      const row = res.rows[0];
+    const getCol = (resObj: any, colName: string, index: number) => {
+      const row = resObj.rows[0];
       if (!row) return 0;
-      // Handle both object mode row.count and index mode row[0]
-      return Number(row.count ?? row[0] ?? 0);
+      return Number(row[colName] ?? row[index] ?? 0);
     };
 
     res.json({
-      totalHouses: getVal(totalHouses),
-      totalMembers: getVal(totalMembers),
-      aplCount: getVal(aplCount),
-      bplCount: getVal(bplCount),
-      maleCount: getVal(maleCount),
-      femaleCount: getVal(femaleCount),
-      studentCount: getVal(studentCount),
+      totalHouses: getCol(housesRes, 'totalHouses', 0),
+      totalMembers: getCol(membersRes, 'totalMembers', 0),
+      aplCount: getCol(housesRes, 'aplCount', 1),
+      bplCount: getCol(housesRes, 'bplCount', 2),
+      maleCount: getCol(membersRes, 'maleCount', 1),
+      femaleCount: getCol(membersRes, 'femaleCount', 2),
+      studentCount: getCol(membersRes, 'studentCount', 3),
       ageGroups: {
-        children: getVal(childrenCount),
-        adults: getVal(adultsCount),
-        seniors: getVal(seniorsCount),
+        children: getCol(membersRes, 'childrenCount', 4),
+        adults: getCol(membersRes, 'adultsCount', 5),
+        seniors: getCol(membersRes, 'seniorsCount', 6),
       },
     });
   } catch (err) {
+    console.error("Stats error:", err);
     res.status(500).json({ error: "Failed to fetch stats" });
   }
 });
@@ -266,48 +273,36 @@ app.post("/api/survey", async (req, res) => {
     return res.status(400).json({ error: "Invalid survey data" });
   }
 
-  // Use a transaction for high speed and data integrity
-  try {
-    const txn = await db.transaction("write");
-    try {
-      // 1. Insert House
-      const houseRes = await txn.execute({
-        sql: "INSERT INTO houses (house_details, area, ration_card_type) VALUES (?, ?, ?)",
-        args: [house.house_details || "", house.area || "", house.ration_card_type || "Other"],
-      });
-      
-      const houseId = houseRes.lastInsertRowid;
-      if (!houseId && houseId !== 0n) {
-        throw new Error("Failed to retrieve house ID");
-      }
+  // Use batched execution to send all queries in a single extremely fast network round-trip.
+  const statements = [];
+  statements.push({
+    sql: "INSERT INTO houses (house_details, area, ration_card_type) VALUES (?, ?, ?)",
+    args: [house.house_details || "", house.area || "", house.ration_card_type || "Other"],
+  });
 
-      // 2. Insert Members
-      for (const member of members) {
-        await txn.execute({
-          sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          args: [
-            houseId, 
-            member.name || "Unknown", 
-            member.gender || "Male", 
-            Number(member.age) || 0, 
-            member.occupation || "", 
-            member.education || "", 
-            member.ration_card_type || house.ration_card_type || "Other", 
-            member.membership_details || "", 
-            member.blood_group || "", 
-            member.phone || "", 
-            member.other_details || ""
-          ],
-        });
-      }
-      
-      await txn.commit();
-      res.json({ success: true, id: houseId.toString() });
-    } catch (err: any) {
-      await txn.rollback();
-      throw err;
-    }
+  for (const member of members) {
+    statements.push({
+      sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
+            VALUES (last_insert_rowid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        member.name || "Unknown", 
+        member.gender || "Male", 
+        Number(member.age) || 0, 
+        member.occupation || "", 
+        member.education || "", 
+        member.ration_card_type || house.ration_card_type || "Other", 
+        member.membership_details || "", 
+        member.blood_group || "", 
+        member.phone || "", 
+        member.other_details || ""
+      ],
+    });
+  }
+
+  try {
+    const results = await db.batch(statements, "write");
+    const houseId = results[0].lastInsertRowid;
+    res.json({ success: true, id: houseId?.toString() });
   } catch (error: any) {
     console.error("Survey submission failure:", error);
     res.status(500).json({ error: "Database failure: " + (error.message || "Unknown error") });
@@ -316,33 +311,44 @@ app.post("/api/survey", async (req, res) => {
 
 app.get("/api/export", async (_req, res) => {
   try {
-    const housesRes = await db.execute("SELECT * FROM houses ORDER BY created_at DESC");
-    const houses = housesRes.rows.map((h: any) => ({
-      id: h.id ?? h[0],
-      house_details: h.house_details ?? h[1],
-      area: h.area ?? h[2],
-      ration_card_type: h.ration_card_type ?? h[3],
-      created_at: h.created_at ?? h[4],
-    }));
-    const housesWithMembers = await Promise.all(
-      houses.map(async (house: any) => {
-        const membersRes = await db.execute({ sql: "SELECT * FROM members WHERE house_id = ?", args: [house.id] });
-        const members = membersRes.rows.map((row: any) => ({
-          id: row.id ?? row[0],
-          name: row.name ?? row[2],
-          gender: row.gender ?? row[3],
-          age: Number(row.age ?? row[4] ?? 0),
-          occupation: row.occupation ?? row[5],
-          education: row.education ?? row[6],
-          ration_card_type: row.ration_card_type ?? row[7],
-          membership_details: row.membership_details ?? row[8],
-          blood_group: row.blood_group ?? row[9],
-          phone: row.phone ?? row[10],
-          other_details: row.other_details ?? row[11],
-        }));
-        return { ...house, members };
-      })
-    );
+    const [housesRes, membersRes] = await Promise.all([
+      db.execute("SELECT * FROM houses ORDER BY created_at DESC"),
+      db.execute("SELECT * FROM members")
+    ]);
+    
+    // Group members by house ID efficiently
+    const membersByHouse = new Map<number, any[]>();
+    for (const row of membersRes.rows) {
+      const houseId = Number(row.house_id ?? row[1] ?? 0);
+      const member = {
+        id: row.id ?? row[0],
+        name: row.name ?? row[2],
+        gender: row.gender ?? row[3],
+        age: Number(row.age ?? row[4] ?? 0),
+        occupation: row.occupation ?? row[5],
+        education: row.education ?? row[6],
+        ration_card_type: row.ration_card_type ?? row[7],
+        membership_details: row.membership_details ?? row[8],
+        blood_group: row.blood_group ?? row[9],
+        phone: row.phone ?? row[10],
+        other_details: row.other_details ?? row[11],
+      };
+      if (!membersByHouse.has(houseId)) membersByHouse.set(houseId, []);
+      membersByHouse.get(houseId)!.push(member);
+    }
+
+    const housesWithMembers = housesRes.rows.map((h: any) => {
+      const id = Number(h.id ?? h[0] ?? 0);
+      return {
+        id,
+        house_details: h.house_details ?? h[1],
+        area: h.area ?? h[2],
+        ration_card_type: h.ration_card_type ?? h[3],
+        created_at: h.created_at ?? h[4],
+        members: membersByHouse.get(id) || []
+      };
+    });
+
     res.json(housesWithMembers);
   } catch (err) {
     res.status(500).json({ error: "Export failed" });
