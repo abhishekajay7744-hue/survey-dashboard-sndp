@@ -29,6 +29,10 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -2256,8 +2260,6 @@ function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
         setStatus('preview');
       } else if (ext === 'pdf') {
         const buffer = await file.arrayBuffer();
-        const pdfjsLib = await import('pdfjs-dist');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
         const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
         // Extract all text items with position info
         const allItems: { str: string; x: number; y: number; page: number }[] = [];
