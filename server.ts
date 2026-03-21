@@ -506,49 +506,7 @@ app.post("/api/seed-data", async (_req, res) => {
   }
 });
 
-// Bulk Import from file (CSV/JSON/XLS parsed by frontend)
-app.post("/api/import", async (req, res) => {
-  const { records } = req.body;
-  if (!Array.isArray(records) || records.length === 0) {
-    return res.status(400).json({ error: "No records provided." });
-  }
 
-  let imported = 0;
-  const errors: string[] = [];
-
-  for (let i = 0; i < records.length; i++) {
-    const record = records[i];
-    const statements: any[] = [];
-    try {
-      const phoneNumbers = JSON.stringify(
-        Array.isArray(record.phone_numbers) ? record.phone_numbers.filter(Boolean) :
-        record.phone ? [record.phone] : []
-      );
-      statements.push({
-        sql: "INSERT INTO houses (house_details, area, ration_card_type, phone_numbers) VALUES (?, ?, ?, ?)",
-        args: [record.house_details || record.address || "", record.area || "", record.ration_card_type || "Other", phoneNumbers],
-      });
-
-      const members = Array.isArray(record.members) ? record.members : [];
-      for (const m of members) {
-        statements.push({
-          sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
-                VALUES (last_insert_rowid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          args: [m.name || "", m.gender || "Male", Number(m.age) || 0, m.occupation || "", m.education || "", m.ration_card_type || record.ration_card_type || "Other", m.membership_details || "", m.blood_group || "", m.phone || "", m.other_details || ""],
-        });
-      }
-
-      if (statements.length > 0) {
-        await db.batch(statements, "write");
-        imported++;
-      }
-    } catch (e: any) {
-      errors.push(`Row ${i + 1}: ${e.message}`);
-    }
-  }
-
-  res.json({ success: true, imported, errors, total: records.length });
-});
 
 // Assets & SPA fallback
 const isProd = process.env.NODE_ENV === "production" || !!process.env.K_SERVICE || !!process.env.VERCEL;

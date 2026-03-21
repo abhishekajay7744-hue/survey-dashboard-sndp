@@ -35,7 +35,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type Tab = 'dashboard' | 'survey' | 'records' | 'settings' | 'import';
+type Tab = 'dashboard' | 'survey' | 'records' | 'settings';
 
 interface User {
   id: number;
@@ -725,36 +725,6 @@ export default function App() {
     doc.save('shakha_1176_survey_master_report.pdf');
   };
 
-  const generateAllRecordsJSON = () => {
-    // Generate full dataset of all houses with their fully populated member lists
-    // The `houses` state only has members loaded on demand, so we need to fetch all or we use the `filteredAndSortedHouses` which might be missing data if not fully loaded.
-    // Wait, let's fetch the full export from the API.
-    const fetchFullExport = async () => {
-      try {
-        const res = await fetch('/api/houses');
-        const dbHouses = await res.json();
-        const exportData = await Promise.all(dbHouses.map(async (h: any) => {
-          const mRes = await fetch(`/api/houses/${h.id}/members`);
-          const members = await mRes.json();
-          return { ...h, members };
-        }));
-        
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "shakha_1176_backup.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-      } catch (e) {
-        console.error("Failed to generate JSON backup", e);
-        alert("Failed to create JSON backup. Please try again.");
-      }
-    };
-    fetchFullExport();
-  };
-
-
   const handleClearData = async () => {
     if (!clearPassword) {
       alert('Please enter your admin password to clear data.');
@@ -1079,13 +1049,6 @@ export default function App() {
             active={activeTab === 'settings'}
             collapsed={!isSidebarOpen && isDesktop}
             onClick={() => { setActiveTab('settings'); if (!isDesktop) setIsSidebarOpen(false); }}
-          />
-          <SidebarItem
-            icon={<Upload size={20} />}
-            label="Import Data"
-            active={activeTab === 'import'}
-            collapsed={!isSidebarOpen && isDesktop}
-            onClick={() => { setActiveTab('import'); if (!isDesktop) setIsSidebarOpen(false); }}
           />
         </nav>
 
@@ -1564,14 +1527,6 @@ export default function App() {
                     <h3 className="text-base md:text-lg font-semibold">All Survey Records</h3>
                     <div className="flex gap-2">
                       <button
-                        onClick={generateAllRecordsJSON}
-                        className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg text-xs font-bold transition-colors shrink-0"
-                      >
-                        <Download size={14} />
-                        <span className="hidden sm:inline">Backup JSON</span>
-                        <span className="sm:hidden">JSON</span>
-                      </button>
-                      <button
                         onClick={generateAllRecordsPDF}
                         className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors shrink-0"
                       >
@@ -1803,10 +1758,6 @@ export default function App() {
                 </div>
               </section>
             </div>
-          )}
-
-          {activeTab === 'import' && (
-            <ImportPanel onImportSuccess={() => { fetchStats(); fetchHouses(); }} />
           )}
         </div>
       </main>
@@ -2260,206 +2211,6 @@ export default function App() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ---- Import Panel Component ----
-function ImportPanel({ onImportSuccess }: { onImportSuccess: () => void }) {
-  const [status, setStatus] = useState<'idle' | 'parsing' | 'preview' | 'importing' | 'done'>('idle');
-  const [records, setRecords] = useState<any[]>([]);
-  const [result, setResult] = useState<{ imported: number; errors: string[]; total: number } | null>(null);
-  const [error, setError] = useState('');
-  const fileRef = React.useRef<HTMLInputElement>(null);
-
-  const parseFile = async (file: File) => {
-    setStatus('parsing');
-    setError('');
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    try {
-      if (ext === 'json') {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        setRecords(Array.isArray(data) ? data : [data]);
-        setStatus('preview');
-      } else if (ext === 'csv') {
-        const text = await file.text();
-        const lines = text.split('\n').filter(l => l.trim());
-        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-        const rows = lines.slice(1).map(line => {
-          const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-          const obj: any = {};
-          headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
-          return obj;
-        });
-        setRecords(rows);
-        setStatus('preview');
-      } else if (ext === 'xlsx' || ext === 'xls') {
-        setError('For Excel files (.xlsx/.xls), please first export the file as CSV from Excel (File → Save As → CSV), then upload that CSV here.');
-        setStatus('idle');
-      } else {
-        setError('Unsupported file. Please upload a .json or .csv file.');
-        setStatus('idle');
-      }
-    } catch (e: any) {
-      setError('Failed to parse file: ' + e.message);
-      setStatus('idle');
-    }
-  };
-
-  const handleImport = async () => {
-    setStatus('importing');
-    try {
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records })
-      });
-      const data = await res.json();
-      setResult(data);
-      setStatus('done');
-      onImportSuccess();
-    } catch (e: any) {
-      setError('Import failed: ' + e.message);
-      setStatus('preview');
-    }
-  };
-
-  const reset = () => {
-    setStatus('idle');
-    setRecords([]);
-    setResult(null);
-    setError('');
-    if (fileRef.current) fileRef.current.value = '';
-  };
-
-  return (
-    <div className="space-y-6">
-      <section className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600"><Upload size={24} /></div>
-          <div>
-            <h2 className="text-xl font-bold">Import Survey Data</h2>
-            <p className="text-sm text-slate-500">Restore lost data by uploading a JSON or CSV file</p>
-          </div>
-        </div>
-
-        {status === 'done' && result ? (
-          <div className="space-y-4">
-            <div className={cn("p-6 rounded-2xl border-2", result.errors.length === 0 ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200")}>
-              <h3 className="font-bold text-lg text-slate-900 mb-2">Import Complete!</h3>
-              <p className="text-slate-700">✅ Successfully imported <strong>{result.imported}</strong> of <strong>{result.total}</strong> records.</p>
-              {result.errors.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-amber-700 font-semibold text-sm mb-2">⚠️ {result.errors.length} row(s) had errors:</p>
-                  <ul className="space-y-1 max-h-32 overflow-y-auto">
-                    {result.errors.map((e, i) => <li key={i} className="text-xs text-red-600 bg-red-50 px-3 py-1 rounded">{e}</li>)}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <button onClick={reset} className="px-6 py-2.5 bg-slate-900 text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors">
-              Import Another File
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* File Drop Zone */}
-            <label className={cn(
-              "flex flex-col items-center justify-center gap-4 p-12 border-2 border-dashed rounded-2xl cursor-pointer transition-all",
-              status === 'parsing' ? "border-indigo-300 bg-indigo-50" : "border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50"
-            )}>
-              <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-500">
-                <Upload size={32} />
-              </div>
-              <div className="text-center">
-                <p className="font-bold text-slate-800 text-lg">Drop file here or click to browse</p>
-                <p className="text-slate-500 text-sm mt-1">Supports <strong>.json</strong> and <strong>.csv</strong> files</p>
-              </div>
-              <input ref={fileRef} type="file" accept=".json,.csv,.xlsx,.xls" className="hidden"
-                onChange={e => { if (e.target.files?.[0]) parseFile(e.target.files[0]); }}
-              />
-            </label>
-
-            {error && (
-              <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl">
-                <AlertCircle size={18} className="shrink-0 mt-0.5" />
-                <p className="text-sm">{error}</p>
-              </div>
-            )}
-
-            {/* Expected Format Guide */}
-            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-              <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText size={16} />Expected File Format (JSON)</h3>
-              <pre className="text-xs text-slate-600 overflow-x-auto bg-white p-4 rounded-xl border border-slate-200">{`[
-  {
-    "house_details": "House Name, Address",
-    "area": "Locality / Ward",
-    "ration_card_type": "APL",
-    "phone_numbers": ["9446123456", "9876543210"],
-    "members": [
-      {
-        "name": "Name",
-        "gender": "Male",
-        "age": 45,
-        "occupation": "Teacher",
-        "blood_group": "B+",
-        "membership_details": "Life Member"
-      }
-    ]
-  }
-]`}</pre>
-              <p className="text-xs text-slate-500 mt-3">💡 For CSV, each row should be one house. For full member details, use <strong>JSON</strong>.</p>
-            </div>
-
-            {/* Preview */}
-            {status === 'preview' && records.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-slate-800">{records.length} record(s) ready to import</h3>
-                  <button onClick={reset} className="text-sm text-slate-500 hover:text-red-500 font-medium">Clear</button>
-                </div>
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium">#</th>
-                        <th className="px-4 py-3 text-left font-medium">House Details</th>
-                        <th className="px-4 py-3 text-left font-medium">Area</th>
-                        <th className="px-4 py-3 text-left font-medium">Ration Card</th>
-                        <th className="px-4 py-3 text-left font-medium">Members</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {records.slice(0, 10).map((r, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 text-slate-400">{i + 1}</td>
-                          <td className="px-4 py-3 font-medium text-slate-900 max-w-[200px] truncate">{r.house_details || r.address || '—'}</td>
-                          <td className="px-4 py-3 text-slate-600">{r.area || '—'}</td>
-                          <td className="px-4 py-3"><span className="px-2 py-0.5 bg-slate-100 rounded text-xs font-medium">{r.ration_card_type || '—'}</span></td>
-                          <td className="px-4 py-3 text-slate-600">{Array.isArray(r.members) ? r.members.length : 0}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {records.length > 10 && (
-                    <p className="text-xs text-slate-500 text-center py-3">...and {records.length - 10} more records</p>
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <button onClick={reset} className="px-6 py-3 border border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors">
-                    Cancel
-                  </button>
-                  <button onClick={handleImport}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
-                    <><Upload size={18} />Import {records.length} Records</>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
     </div>
   );
 }
