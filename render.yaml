@@ -2,18 +2,14 @@ services:
   - type: web
     name: sndp-survey-project
     env: node
-    plan: standard # Required for persistent disks
+    plan: starter # Turso cloud DB handles persistence - no disk needed
     buildCommand: npm install && npm run build
     startCommand: npx tsx server.ts
-    disk:
-      name: survey-data
-      mountPath: /var/lib/survey-data
-      sizeGB: 10
     envVars:
       - key: NODE_ENV
         value: production
-      - key: SQLITE_DB_PATH
-        value: /var/lib/survey-data/survey.db
+      # SQLITE_DB_PATH is intentionally NOT set so the app always uses
+      # the Turso cloud database, which persists across all redeployments.
       - key: TURSO_DATABASE_URL
         sync: false # Set this in the Render Dashboard for security
       - key: TURSO_AUTH_TOKEN
