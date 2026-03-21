@@ -287,38 +287,41 @@ app.post("/api/survey", async (req, res) => {
     return res.status(400).json({ error: "Invalid survey data" });
   }
 
-  // Use batched execution to send all queries in a single extremely fast network round-trip.
-  const statements = [];
   const phoneNumbers = JSON.stringify(
     Array.isArray(house.phone_numbers) ? house.phone_numbers.filter(Boolean) : []
   );
-  statements.push({
-    sql: "INSERT INTO houses (house_details, area, ration_card_type, phone_numbers) VALUES (?, ?, ?, ?)",
-    args: [house.house_details || "", house.area || "", house.ration_card_type || "Other", phoneNumbers],
-  });
-
-  for (const member of members) {
-    statements.push({
-      sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
-            VALUES (last_insert_rowid(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: [
-        member.name || "Unknown", 
-        member.gender || "Male", 
-        Number(member.age) || 0, 
-        member.occupation || "", 
-        member.education || "", 
-        member.ration_card_type || house.ration_card_type || "Other", 
-        member.membership_details || "", 
-        member.blood_group || "", 
-        member.phone || "", 
-        member.other_details || ""
-      ],
-    });
-  }
 
   try {
-    const results = await db.batch(statements, "write");
-    const houseId = results[0].lastInsertRowid;
+    const tx = await db.transaction("write");
+    
+    const houseRes = await tx.execute({
+      sql: "INSERT INTO houses (house_details, area, ration_card_type, phone_numbers) VALUES (?, ?, ?, ?)",
+      args: [house.house_details || "", house.area || "", house.ration_card_type || "Other", phoneNumbers],
+    });
+    
+    const houseId = houseRes.lastInsertRowid;
+
+    for (const member of members) {
+      await tx.execute({
+        sql: `INSERT INTO members (house_id, name, gender, age, occupation, education, ration_card_type, membership_details, blood_group, phone, other_details)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          houseId,
+          member.name || "Unknown", 
+          member.gender || "Male", 
+          Number(member.age) || 0, 
+          member.occupation || "", 
+          member.education || "", 
+          member.ration_card_type || house.ration_card_type || "Other", 
+          member.membership_details || "", 
+          member.blood_group || "", 
+          member.phone || "", 
+          member.other_details || ""
+        ],
+      });
+    }
+
+    await tx.commit();
     res.json({ success: true, id: houseId?.toString() });
   } catch (error: any) {
     console.error("Survey submission failure:", error);
