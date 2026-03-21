@@ -919,8 +919,8 @@ export default function App() {
         <div className="w-full max-w-[440px] relative z-10">
           <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-10 shadow-2xl shadow-black/50">
             <div className="flex flex-col items-center mb-7 sm:mb-10">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 mb-4 sm:mb-6 rounded-2xl overflow-hidden shadow-2xl hover:scale-105 transition-transform duration-300 border-2 border-slate-700/50">
-                <img src="/sndp-logo.jpg" alt="SNDP Logo" className="w-full h-full object-cover" />
+              <div className="bg-emerald-500 w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-4 sm:mb-6 shadow-lg shadow-emerald-500/20 rotate-3 transition-transform hover:rotate-0 duration-300">
+                <LayoutDashboard size={28} className="text-white" />
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight text-center">SNDP SURVEY</h1>
               <p className="text-slate-400 text-xs sm:text-sm mt-2 sm:mt-3 font-medium uppercase tracking-widest text-center">Digital Administration Portal</p>
@@ -1015,8 +1015,8 @@ export default function App() {
         isDesktop ? (isSidebarOpen ? "w-64" : "w-20") : (isSidebarOpen ? "fixed inset-y-0 left-0 w-72" : "fixed inset-y-0 -left-72 w-72")
       )}>
         <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 shadow-md border border-slate-700">
-            <img src="/sndp-logo.jpg" alt="SNDP" className="w-full h-full object-cover" />
+          <div className="bg-emerald-500 p-2 rounded-lg">
+            <LayoutDashboard size={24} />
           </div>
           {isSidebarOpen && <span className="font-bold text-lg tracking-tight">SNDP Survey</span>}
         </div>
