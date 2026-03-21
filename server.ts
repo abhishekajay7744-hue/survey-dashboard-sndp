@@ -12,10 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- Turso / libsql Client Setup ---
 const getDbUrl = () => {
-  if (process.env.SQLITE_DB_PATH) {
-    console.log("Database: Using local SQLite persistent disk at " + process.env.SQLITE_DB_PATH);
-    return `file:${process.env.SQLITE_DB_PATH}`;
-  }
+
   if (process.env.TURSO_DATABASE_URL) {
     console.log("Database: Using remote Turso URL from ENV");
     return process.env.TURSO_DATABASE_URL;
