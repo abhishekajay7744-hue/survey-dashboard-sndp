@@ -202,6 +202,14 @@ export default function App() {
   const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
   const [memberEditForm, setMemberEditForm] = useState<Member | null>(null);
   const [houseSearch, setHouseSearch] = useState('');
+  const [debouncedHouseSearch, setDebouncedHouseSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedHouseSearch(houseSearch);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [houseSearch]);
   const [sortBy, setSortBy] = useState<'area' | 'details' | 'date' | null>('area');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
@@ -258,16 +266,12 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     fetchSuggestions();
-    
-    const timeoutId = setTimeout(() => {
-      fetchHouses();
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [user, currentPage, houseSearch, sortBy, sortOrder, categoryFilter]);
+    fetchHouses();
+  }, [user, currentPage, debouncedHouseSearch, sortBy, sortOrder, categoryFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [categoryFilter, houseSearch, sortBy, sortOrder]);
+  }, [categoryFilter, debouncedHouseSearch, sortBy, sortOrder]);
 
   useEffect(() => {
     if (activeTab === 'logs') {
@@ -384,7 +388,7 @@ export default function App() {
       const queryParams = new URLSearchParams();
       queryParams.append('page', String(currentPage));
       queryParams.append('limit', '50');
-      if (houseSearch) queryParams.append('search', houseSearch);
+      if (debouncedHouseSearch) queryParams.append('search', debouncedHouseSearch);
       if (sortBy) queryParams.append('sortBy', sortBy);
       if (sortOrder) queryParams.append('sortOrder', sortOrder);
       if (categoryFilter) queryParams.append('categoryFilter', categoryFilter);
@@ -937,9 +941,11 @@ export default function App() {
   const handleUpdateMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!memberEditForm || !editingMemberId || !selectedHouse) return;
-    try {
-      const isNew = editingMemberId === -1;
-      const url = isNew ? `/api/houses/${selectedHouse.id}/members` : `/api/members/${editingMemberId}`;
+    
+    showConfirm('Are you sure you want to save these changes?', async () => {
+      try {
+        const isNew = editingMemberId === -1;
+        const url = isNew ? `/api/houses/${selectedHouse.id}/members` : `/api/members/${editingMemberId}`;
       const method = isNew ? 'POST' : 'PUT';
       
       const res = await fetch(url, {
@@ -968,10 +974,12 @@ export default function App() {
         const errorData = await res.json();
         alert(errorData.error || 'Operation failed');
       }
-    } catch (err) {
-      console.error(err);
-      alert(editingMemberId === -1 ? 'Failed to add member' : 'Failed to update member');
-    }
+        }
+      } catch (err) {
+        console.error(err);
+        alert(editingMemberId === -1 ? 'Failed to add member' : 'Failed to update member');
+      }
+    });
   };
 
   const handleDeleteMember = (id: number) => {
@@ -2065,7 +2073,7 @@ export default function App() {
                   <h4 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Address & Details</h4>
                   <button
                     onClick={() => setIsEditingHouse(!isEditingHouse)}
-                    className="text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-emerald-100 rounded"
+                    className="text-emerald-600 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 hover:bg-emerald-100 rounded"
                   >
                     <Edit size={16} />
                   </button>
@@ -2132,20 +2140,22 @@ export default function App() {
                         Cancel
                       </button>
                       <button
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(`/api/houses/${selectedHouse.id}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
-                              body: JSON.stringify({ house_details: selectedHouse.house_details, area: selectedHouse.area, ration_card_type: selectedHouse.ration_card_type, phone_numbers: selectedHouse.phone_numbers || [] })
-                            });
-                            if (res.ok) {
-                              setIsEditingHouse(false);
-                              fetchHouses();
+                        onClick={() => {
+                          showConfirm('Are you sure you want to save these changes?', async () => {
+                            try {
+                              const res = await fetch(`/api/houses/${selectedHouse.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
+                                body: JSON.stringify({ house_details: selectedHouse.house_details, area: selectedHouse.area, ration_card_type: selectedHouse.ration_card_type, phone_numbers: selectedHouse.phone_numbers || [] })
+                              });
+                              if (res.ok) {
+                                setIsEditingHouse(false);
+                                fetchHouses();
+                              }
+                            } catch (err) {
+                              alert('Failed to update house');
                             }
-                          } catch (err) {
-                            alert('Failed to update house');
-                          }
+                          });
                         }}
                         className="px-3 py-1 text-sm font-medium bg-emerald-600 text-white rounded hover:bg-emerald-700"
                       >
