@@ -1024,11 +1024,18 @@ export default function App() {
         "bg-slate-900 text-white transition-all duration-300 flex flex-col z-50",
         isDesktop ? (isSidebarOpen ? "w-64" : "w-20") : (isSidebarOpen ? "fixed inset-y-0 left-0 w-72" : "fixed inset-y-0 -left-72 w-72")
       )}>
-        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="bg-emerald-500 p-2 rounded-lg">
-            <LayoutDashboard size={24} />
+        <div className="p-6 flex items-center justify-between border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-500 p-2 rounded-lg">
+              <LayoutDashboard size={24} />
+            </div>
+            {isSidebarOpen && <span className="font-bold text-lg tracking-tight">SNDP Survey</span>}
           </div>
-          {isSidebarOpen && <span className="font-bold text-lg tracking-tight">SNDP Survey</span>}
+          {!isDesktop && (
+            <button onClick={() => setIsSidebarOpen(false)} className="p-1.5 bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors">
+              <X size={20} />
+            </button>
+          )}
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
@@ -1128,7 +1135,7 @@ export default function App() {
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                 <StatCard
                   title="Total Houses"
                   value={stats.totalHouses}
@@ -1392,7 +1399,7 @@ export default function App() {
                         </div>
                       ))}
                       <button type="button" onClick={() => setHouseForm({ ...houseForm, phone_numbers: [...(houseForm.phone_numbers || ['']), ''] })}
-                        className="flex items-center gap-2 text-emerald-600 text-sm font-semibold hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
+                        className="flex items-center gap-2 text-emerald-600 text-sm font-semibold hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap w-fit">
                         <PlusCircle size={15} /> Add Another Number
                       </button>
                     </div>
@@ -1402,17 +1409,17 @@ export default function App() {
 
               {/* Members Section */}
               <section className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-8">
                   <div className="flex items-center gap-3">
                     <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
                       <Users size={24} />
                     </div>
-                    <h2 className="text-xl font-bold">Family Members</h2>
+                    <h2 className="text-lg sm:text-xl font-bold">Family Members</h2>
                   </div>
                   <button
                     type="button"
                     onClick={handleAddMember}
-                    className="flex items-center gap-2 text-emerald-600 font-semibold hover:bg-emerald-50 px-4 py-2 rounded-lg transition-colors"
+                    className="flex items-center gap-2 text-emerald-600 font-semibold hover:bg-emerald-50 px-4 py-2 rounded-lg transition-colors whitespace-nowrap w-full sm:w-auto justify-center sm:justify-start border border-emerald-100 sm:border-transparent"
                   >
                     <PlusCircle size={20} />
                     Add Member
@@ -1518,17 +1525,17 @@ export default function App() {
                 </div>
               </section>
 
-              <div className="flex justify-end gap-4 pb-12">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 sm:gap-4 pb-12">
                 <button
                   type="button"
                   onClick={() => setActiveTab('dashboard')}
-                  className="px-8 py-3 rounded-xl border border-slate-200 font-semibold hover:bg-slate-100 transition-colors"
+                  className="w-full sm:w-auto px-8 py-3 rounded-xl border border-slate-200 font-semibold hover:bg-slate-100 transition-colors flex justify-center"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all flex items-center gap-2"
+                  className="w-full sm:w-auto px-8 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   <Save size={20} />
                   Save Survey Data
@@ -1600,15 +1607,15 @@ export default function App() {
                   )}
                 </div>
                 <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
-                  <table className="w-full text-left min-w-[600px]">
+                  <table className="w-full text-left min-w-[900px]">
                     <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                       <tr>
-                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => { setSortBy('details'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>House Details {sortBy === 'details' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
-                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => { setSortBy('area'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Area/Locality {sortBy === 'area' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
-                        <th className="px-6 py-4 font-medium text-center">Card</th>
-                        <th className="px-6 py-4 font-medium text-center">Members</th>
-                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => { setSortBy('date'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
-                        <th className="px-6 py-4 font-medium">Actions</th>
+                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('details'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>House Details {sortBy === 'details' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('area'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Area/Locality {sortBy === 'area' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                        <th className="px-6 py-4 font-medium text-center whitespace-nowrap">Card</th>
+                        <th className="px-6 py-4 font-medium text-center whitespace-nowrap">Members</th>
+                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('date'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                        <th className="px-6 py-4 font-medium whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1656,10 +1663,10 @@ export default function App() {
                                 {house.members?.length || 0}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-slate-500 text-sm">
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 text-sm">
                               {new Date(house.created_at || '').toLocaleDateString()}
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   onClick={() => generateHousePDF(house)}
@@ -2302,19 +2309,19 @@ function StatCard({ title, value, icon, color, trend, onClick }: {
   return (
     <div 
       onClick={onClick}
-      className={cn("group bg-white p-7 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden", onClick ? "cursor-pointer" : "")}>
+      className={cn("group bg-white p-4 sm:p-7 rounded-3xl sm:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col justify-between", onClick ? "cursor-pointer" : "")}>
       <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-full translate-x-8 -translate-y-8 group-hover:bg-emerald-50/50 transition-colors"></div>
       
       <div className="relative z-10">
-        <div className={cn("p-4 rounded-2xl w-fit mb-6 shadow-sm", color ? colorMap[color] : "bg-slate-50")}>
+        <div className={cn("p-3 sm:p-4 rounded-xl sm:rounded-2xl w-fit mb-4 sm:mb-6 shadow-sm", color ? colorMap[color] : "bg-slate-50")}>
           {icon}
         </div>
         
-        <p className="text-slate-500 text-xs font-black uppercase tracking-widest mb-2">{title}</p>
-        <div className="flex items-baseline gap-2">
-          <h4 className="text-3xl font-black text-slate-900 tracking-tight">{value}</h4>
+        <p className="text-slate-500 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-1 sm:mb-2 line-clamp-1">{title}</p>
+        <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
+          <h4 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{value}</h4>
           {trend && (
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-tighter bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100 w-fit">
               {trend}
             </span>
           )}
