@@ -36,7 +36,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type Tab = 'dashboard' | 'survey' | 'records' | 'settings' | 'logs';
+type Tab = 'dashboard' | 'survey' | 'records' | 'settings';
 
 interface User {
   id: number;
@@ -215,7 +215,7 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Password Visibility Toggle State
   const [showPwd, setShowPwd] = useState(false);
@@ -281,12 +281,6 @@ export default function App() {
     setCurrentPage(1);
   }, [categoryFilter, debouncedHouseSearch, sortBy, sortOrder]);
 
-
-  useEffect(() => {
-    if (activeTab === 'logs') {
-      fetchLogs();
-    }
-  }, [activeTab, user]);
 
   // Derived identical houses for validation
   const existingHouseMatch = React.useMemo(() => {
@@ -418,15 +412,6 @@ export default function App() {
     }
   };
 
-  const fetchLogs = async () => {
-    try {
-      const res = await fetch('/api/logs');
-      const data = await res.json();
-      setLogs(data);
-    } catch (err) {
-      console.error("Failed to fetch logs:", err);
-    }
-  };
 
   const handleAddMember = () => {
     setMembers([{
@@ -1179,13 +1164,7 @@ export default function App() {
             collapsed={!isSidebarOpen && isDesktop}
             onClick={() => { setActiveTab('settings'); if (!isDesktop) setIsSidebarOpen(false); }}
           />
-          <SidebarItem
-            icon={<Activity size={20} />}
-            label="Activity Logs"
-            active={activeTab === 'logs'}
-            collapsed={!isSidebarOpen && isDesktop}
-            onClick={() => { setActiveTab('logs'); if (!isDesktop) setIsSidebarOpen(false); }}
-          />
+
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -1955,43 +1934,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'logs' && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-4 sm:p-6 max-w-6xl mx-auto">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
-                  <Activity size={24} />
-                </div>
-                <h2 className="text-xl font-bold">System Activity Logs</h2>
-              </div>
-              <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
-                <table className="w-full text-left min-w-[800px]">
-                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                    <tr>
-                      <th className="px-6 py-4 font-medium">Date / Time</th>
-                      <th className="px-6 py-4 font-medium">User</th>
-                      <th className="px-6 py-4 font-medium">Action</th>
-                      <th className="px-6 py-4 font-medium">Details</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {logs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">{log.username}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono text-xs">{log.action}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-600">{log.details}</td>
-                      </tr>
-                    ))}
-                    {logs.length === 0 && (
-                      <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No activity recorded yet.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+
         </div>
       </main>
 
@@ -2003,7 +1946,6 @@ export default function App() {
             { tab: 'survey' as Tab, icon: <PlusCircle size={20} />, label: 'Survey' },
             { tab: 'records' as Tab, icon: <Home size={20} />, label: 'Records' },
             { tab: 'settings' as Tab, icon: <Users size={20} />, label: 'Settings' },
-            { tab: 'logs' as Tab, icon: <Activity size={20} />, label: 'Logs' },
           ].map(({ tab, icon, label }) => (
             <button
               key={tab}
