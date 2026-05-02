@@ -22,7 +22,8 @@ import {
   Eye,
   EyeOff,
   Upload,
-  Phone
+  Phone,
+  FileSpreadsheet
 } from 'lucide-react';
 
 import { clsx, type ClassValue } from 'clsx';
@@ -35,11 +36,12 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type Tab = 'dashboard' | 'survey' | 'records' | 'settings';
+type Tab = 'dashboard' | 'survey' | 'records' | 'settings' | 'logs';
 
 interface User {
   id: number;
   username: string;
+  role?: string;
 }
 
 interface House {
@@ -203,6 +205,9 @@ export default function App() {
   const [sortBy, setSortBy] = useState<'area' | 'details' | 'date' | null>('area');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [logs, setLogs] = useState<any[]>([]);
   
   // Password Visibility Toggle State
   const [showPwd, setShowPwd] = useState(false);
@@ -251,10 +256,24 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (user) {
-      fetchSuggestions();
+    if (!user) return;
+    fetchSuggestions();
+    
+    const timeoutId = setTimeout(() => {
+      fetchHouses();
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [user, currentPage, houseSearch, sortBy, sortOrder, categoryFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, houseSearch, sortBy, sortOrder]);
+
+  useEffect(() => {
+    if (activeTab === 'logs' && user?.role === 'admin') {
+      fetchLogs();
     }
-  }, [user]);
+  }, [activeTab, user]);
 
   // Derived identical houses for validation
   const existingHouseMatch = React.useMemo(() => {
@@ -277,43 +296,7 @@ export default function App() {
     setConfirmModal({ open: true, message, onConfirm });
   };
 
-  const filteredAndSortedHouses = React.useMemo(() => {
-    return houses
-      .filter(h => {
-        if (categoryFilter === 'APL') return h.ration_card_type === 'APL';
-        if (categoryFilter === 'BPL') return h.ration_card_type === 'BPL' || h.ration_card_type === 'AAY';
-        if (categoryFilter === 'Male') return h.members?.some(m => m.gender === 'Male');
-        if (categoryFilter === 'Female') return h.members?.some(m => m.gender === 'Female');
-        if (categoryFilter === 'Student') return h.members?.some(m => m.occupation?.toLowerCase().includes('student') || m.education?.toLowerCase().includes('student'));
-        if (categoryFilter === 'Senior') return h.members?.some(m => Number(m.age) >= 60);
-        return true;
-      })
-      .filter(h => {
-        const q = houseSearch.toLowerCase();
-        if (!q) return true;
-        const memberMatch = Array.isArray(h.members) && h.members.some(m => m && (
-          m.name?.toLowerCase().includes(q) ||
-          m.phone?.toLowerCase().includes(q) ||
-          m.occupation?.toLowerCase().includes(q)
-        ));
-        return (h.house_details || '').toLowerCase().includes(q) ||
-          (h.area || '').toLowerCase().includes(q) ||
-          (h.ration_card_type || '').toLowerCase().includes(q) ||
-          memberMatch;
-      })
-      .sort((a, b) => {
-        if (!sortBy) return 0;
-        let valA = '';
-        let valB = '';
-        if (sortBy === 'area') { valA = a.area || ''; valB = b.area || ''; }
-        else if (sortBy === 'details') { valA = a.house_details || ''; valB = b.house_details || ''; }
-        else if (sortBy === 'date') { valA = a.created_at || ''; valB = b.created_at || ''; }
-        
-        if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-        if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-        return 0;
-      });
-  }, [houses, houseSearch, sortBy, sortOrder, categoryFilter]);
+  // Backend handles filtering and sorting
 
 
 
@@ -398,17 +381,37 @@ export default function App() {
 
   const fetchHouses = async () => {
     try {
-      const res = await fetch('/api/export');
+      const queryParams = new URLSearchParams();
+      queryParams.append('page', String(currentPage));
+      queryParams.append('limit', '50');
+      if (houseSearch) queryParams.append('search', houseSearch);
+      if (sortBy) queryParams.append('sortBy', sortBy);
+      if (sortOrder) queryParams.append('sortOrder', sortOrder);
+      if (categoryFilter) queryParams.append('categoryFilter', categoryFilter);
+
+      const res = await fetch(`/api/houses?${queryParams.toString()}`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setHouses(data);
+      if (data.houses) {
+        setHouses(data.houses);
+        setTotalRecords(data.totalCount || 0);
       } else {
-        console.error("Houses data is not an array:", data);
         setHouses([]);
+        setTotalRecords(0);
       }
     } catch (err) {
       console.error("Houses fetch error:", err);
       setHouses([]);
+      setTotalRecords(0);
+    }
+  };
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch('/api/logs');
+      const data = await res.json();
+      setLogs(data);
+    } catch (err) {
+      console.error("Failed to fetch logs:", err);
     }
   };
 
@@ -443,7 +446,7 @@ export default function App() {
     try {
       const res = await fetch('/api/survey', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
         body: JSON.stringify({ house: houseForm, members })
       });
       if (res.ok) {
@@ -475,6 +478,76 @@ export default function App() {
   };
 
 
+
+  const generateCSV = () => {
+    // CSV headers
+    const headers = [
+      'House ID',
+      'House Details',
+      'Area',
+      'Ration Card Type',
+      'House Phones',
+      'Member Name',
+      'Gender',
+      'Age',
+      'Blood Group',
+      'Education',
+      'Occupation',
+      'Membership Details',
+      'Member Phone',
+      'Other Details',
+      'Created At'
+    ];
+
+    const rows: string[][] = [headers];
+
+    filteredAndSortedHouses.forEach(house => {
+      const housePhones = (house.phone_numbers || []).join(' / ');
+      const date = house.created_at ? new Date(house.created_at).toLocaleDateString() : '';
+      
+      if (!house.members || house.members.length === 0) {
+        // Add row for house without members
+        rows.push([
+          String(house.id),
+          `"${(house.house_details || '').replace(/"/g, '""')}"`,
+          `"${(house.area || '').replace(/"/g, '""')}"`,
+          house.ration_card_type || '',
+          `"${housePhones}"`,
+          '', '', '', '', '', '', '', '', '', date
+        ]);
+      } else {
+        house.members.forEach(m => {
+          rows.push([
+            String(house.id),
+            `"${(house.house_details || '').replace(/"/g, '""')}"`,
+            `"${(house.area || '').replace(/"/g, '""')}"`,
+            house.ration_card_type || '',
+            `"${housePhones}"`,
+            `"${(m.name || '').replace(/"/g, '""')}"`,
+            m.gender || '',
+            String(m.age || ''),
+            m.blood_group || '',
+            `"${(m.education || '').replace(/"/g, '""')}"`,
+            `"${(m.occupation || '').replace(/"/g, '""')}"`,
+            `"${(m.membership_details || '').replace(/"/g, '""')}"`,
+            `"${(m.phone || '').replace(/"/g, '""')}"`,
+            `"${(m.other_details || '').replace(/"/g, '""')}"`,
+            date
+          ]);
+        });
+      }
+    });
+
+    const csvContent = rows.map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `sndp_survey_data_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const generateHousePDF = async (house: House) => {
     let fullHouse = house;
@@ -836,7 +909,10 @@ export default function App() {
   const handleDeleteHouse = (id: number) => {
     showConfirm('Are you sure you want to delete this house and all its members? This action cannot be undone.', async () => {
       try {
-        const res = await fetch(`/api/houses/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/houses/${id}`, { 
+          method: 'DELETE',
+          headers: { 'X-User-Name': user?.username || '' }
+        });
         if (res.ok) {
           fetchStats();
           fetchHouses();
@@ -859,7 +935,7 @@ export default function App() {
       
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
         body: JSON.stringify(memberEditForm)
       });
       if (res.ok) {
@@ -892,7 +968,10 @@ export default function App() {
   const handleDeleteMember = (id: number) => {
     showConfirm('Are you sure you want to delete this member? This action cannot be undone.', async () => {
       try {
-        const res = await fetch(`/api/members/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/members/${id}`, { 
+          method: 'DELETE',
+          headers: { 'X-User-Name': user?.username || '' }
+        });
         if (res.ok) {
           await fetchStats();
           fetchHouses();
@@ -1067,6 +1146,15 @@ export default function App() {
             collapsed={!isSidebarOpen && isDesktop}
             onClick={() => { setActiveTab('settings'); if (!isDesktop) setIsSidebarOpen(false); }}
           />
+          {user?.role === 'admin' && (
+            <SidebarItem
+              icon={<Activity size={20} />}
+              label="Activity Logs"
+              active={activeTab === 'logs'}
+              collapsed={!isSidebarOpen && isDesktop}
+              onClick={() => { setActiveTab('logs'); if (!isDesktop) setIsSidebarOpen(false); }}
+            />
+          )}
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -1563,7 +1651,7 @@ export default function App() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-full">
                             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                            {filteredAndSortedHouses.length} of {houses.length} houses shown
+                            {totalRecords} houses found
                           </span>
                           <button
                             onClick={() => setCategoryFilter(null)}
@@ -1576,8 +1664,16 @@ export default function App() {
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <button
+                        onClick={generateCSV}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg text-xs font-bold transition-colors shadow-sm"
+                      >
+                        <FileSpreadsheet size={14} />
+                        <span className="hidden sm:inline">Export CSV</span>
+                        <span className="sm:hidden">CSV</span>
+                      </button>
+                      <button
                         onClick={generateAllRecordsPDF}
-                        className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors"
+                        className="flex items-center gap-2 px-3 py-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg text-xs font-bold transition-colors shadow-sm"
                       >
                         <Download size={14} />
                         <span className="hidden sm:inline">Download Master List</span>
@@ -1591,18 +1687,18 @@ export default function App() {
                       type="text"
                       placeholder="Search by name, house, area..."
                       value={houseSearch}
-                      onChange={(e) => setHouseSearch(e.target.value)}
+                      onChange={(e) => { setHouseSearch(e.target.value); setCurrentPage(1); }}
                       className="w-full pl-9 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                     />
                     {houseSearch && (
-                      <button onClick={() => setHouseSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <button onClick={() => { setHouseSearch(''); setCurrentPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
                         <X size={14} />
                       </button>
                     )}
                   </div>
                   {houseSearch && (
                     <p className="text-xs text-slate-500">
-                      {filteredAndSortedHouses.length} results for "{houseSearch}"
+                      {totalRecords} results for "{houseSearch}"
                     </p>
                   )}
                 </div>
@@ -1610,16 +1706,16 @@ export default function App() {
                   <table className="w-full text-left min-w-[900px]">
                     <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
                       <tr>
-                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('details'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>House Details {sortBy === 'details' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
-                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('area'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Area/Locality {sortBy === 'area' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('details'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); setCurrentPage(1); }}>House Details {sortBy === 'details' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('area'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); setCurrentPage(1); }}>Area/Locality {sortBy === 'area' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
                         <th className="px-6 py-4 font-medium text-center whitespace-nowrap">Card</th>
                         <th className="px-6 py-4 font-medium text-center whitespace-nowrap">Members</th>
-                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('date'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); }}>Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
+                        <th className="px-6 py-4 font-medium cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => { setSortBy('date'); setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc'); setCurrentPage(1); }}>Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}</th>
                         <th className="px-6 py-4 font-medium whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredAndSortedHouses.map((house) => {
+                      {houses.map((house) => {
                           const handleRowClick = async () => {
                             console.log("Opening house:", house.id);
                             try {
@@ -1682,12 +1778,14 @@ export default function App() {
                                 >
                                   <Users size={18} />
                                 </button>
-                                <button
-                                  onClick={() => handleDeleteHouse(house.id!)}
-                                  className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                                {user?.role === 'admin' && (
+                                  <button
+                                    onClick={() => handleDeleteHouse(house.id!)}
+                                    className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1700,6 +1798,25 @@ export default function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="p-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500 bg-white">
+                  <div>Showing {houses.length} of {totalRecords} records</div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50 transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <button 
+                      onClick={() => setCurrentPage(p => p + 1)}
+                      disabled={currentPage * 50 >= totalRecords}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1778,34 +1895,75 @@ export default function App() {
                 </form>
               </section>
 
-              <section className="bg-white p-8 rounded-2xl border border-red-100 shadow-sm mt-8">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="bg-red-100 p-2 rounded-lg text-red-600">
-                    <Trash2 size={24} />
+              {user?.role === 'admin' && (
+                <section className="bg-white p-8 rounded-2xl border border-red-100 shadow-sm mt-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-red-100 p-2 rounded-lg text-red-600">
+                      <Trash2 size={24} />
+                    </div>
+                    <h2 className="text-xl font-bold text-red-600">Danger Zone</h2>
                   </div>
-                  <h2 className="text-xl font-bold text-red-600">Danger Zone</h2>
+                  <p className="text-slate-500 text-sm mb-6">
+                    To clear all survey records, please enter your current admin password below.
+                  </p>
+                  <div className="space-y-4">
+                    <FormField label="Enter Admin Password to Confirm">
+                      <input
+                        type="password"
+                        value={clearPassword}
+                        onChange={(e) => setClearPassword(e.target.value)}
+                        className="form-input border-red-200 focus:border-red-500 focus:ring-red-500"
+                        placeholder="Type password here..."
+                      />
+                    </FormField>
+                    <button
+                      onClick={handleClearData}
+                      className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                    >
+                      Permanently Clear All Data
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
+            </div>
+          )}
+
+          {activeTab === 'logs' && user?.role === 'admin' && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-4 sm:p-6 max-w-6xl mx-auto">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
+                  <Activity size={24} />
                 </div>
-                <p className="text-slate-500 text-sm mb-6">
-                  To clear all survey records, please enter your current admin password below.
-                </p>
-                <div className="space-y-4">
-                  <FormField label="Enter Admin Password to Confirm">
-                    <input
-                      type="password"
-                      value={clearPassword}
-                      onChange={(e) => setClearPassword(e.target.value)}
-                      className="form-input border-red-200 focus:border-red-500 focus:ring-red-500"
-                      placeholder="Type password here..."
-                    />
-                  </FormField>
-                  <button
-                    onClick={handleClearData}
-                    className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
-                  >
-                    Permanently Clear All Data
-                  </button>
-                </div>
-              </section>
+                <h2 className="text-xl font-bold">System Activity Logs</h2>
+              </div>
+              <div className="overflow-x-auto -webkit-overflow-scrolling-touch">
+                <table className="w-full text-left min-w-[800px]">
+                  <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="px-6 py-4 font-medium">Date / Time</th>
+                      <th className="px-6 py-4 font-medium">User</th>
+                      <th className="px-6 py-4 font-medium">Action</th>
+                      <th className="px-6 py-4 font-medium">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {logs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-slate-900">{log.username}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-mono text-xs">{log.action}</span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-600">{log.details}</td>
+                      </tr>
+                    ))}
+                    {logs.length === 0 && (
+                      <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-400">No activity recorded yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1817,8 +1975,9 @@ export default function App() {
           {[
             { tab: 'dashboard' as Tab, icon: <LayoutDashboard size={20} />, label: 'Home' },
             { tab: 'survey' as Tab, icon: <PlusCircle size={20} />, label: 'Survey' },
-            { tab: 'records' as Tab, icon: <Home size={20} />, label: 'Records', onClickExtra: () => setCategoryFilter(null) },
+            { tab: 'records' as Tab, icon: <Home size={20} />, label: 'Records' },
             { tab: 'settings' as Tab, icon: <Users size={20} />, label: 'Settings' },
+            ...(user?.role === 'admin' ? [{ tab: 'logs' as Tab, icon: <Activity size={20} />, label: 'Logs' }] : []),
           ].map(({ tab, icon, label }) => (
             <button
               key={tab}
@@ -1975,7 +2134,7 @@ export default function App() {
                           try {
                             const res = await fetch(`/api/houses/${selectedHouse.id}`, {
                               method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
                               body: JSON.stringify({ house_details: selectedHouse.house_details, area: selectedHouse.area, ration_card_type: selectedHouse.ration_card_type, phone_numbers: selectedHouse.phone_numbers || [] })
                             });
                             if (res.ok) {
@@ -2242,13 +2401,15 @@ export default function App() {
                             >
                               <Edit size={18} />
                             </button>
-                            <button
-                              onClick={() => handleDeleteMember(member.id!)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete Member"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            {user?.role === 'admin' && (
+                              <button
+                                onClick={() => handleDeleteMember(member.id!)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete Member"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}

@@ -85,6 +85,14 @@ async function initDb() {
       role TEXT DEFAULT 'admin'
     );
 
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT,
+      action TEXT,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_members_house_id ON members(house_id);
     CREATE INDEX IF NOT EXISTS idx_houses_area ON houses(area);
     CREATE INDEX IF NOT EXISTS idx_members_name ON members(name);
@@ -111,10 +119,33 @@ async function initDb() {
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync("admin123", salt);
     await db.execute({
-      sql: "INSERT INTO users (username, password) VALUES (?, ?)",
-      args: ["admin", hashedPassword],
+      sql: "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+      args: ["admin", hashedPassword, "admin"],
     });
     console.log("Default admin account created.");
+  }
+
+  const editorRes = await db.execute("SELECT * FROM users WHERE username = 'editor'");
+  if (editorRes.rows.length === 0) {
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync("editor123", salt);
+    await db.execute({
+      sql: "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+      args: ["editor", hashedPassword, "data_entry"],
+    });
+    console.log("Default editor account created.");
+  }
+}
+
+async function logActivity(username: string | undefined | null, action: string, details: string) {
+  try {
+    const userToLog = username || 'system';
+    await db.execute({
+      sql: "INSERT INTO activity_logs (username, action, details) VALUES (?, ?, ?)",
+      args: [userToLog, action, details],
+    });
+  } catch (err) {
+    console.error("Failed to log activity:", err);
   }
 }
 
@@ -226,18 +257,72 @@ app.get("/api/stats", async (_req, res) => {
 });
 
 app.get("/api/houses", async (req, res) => {
-  const limit = parseInt(req.query.limit as string) || 200;
-  const offset = parseInt(req.query.offset as string) || 0;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 50;
+  const offset = (page - 1) * limit;
+  const search = (req.query.search as string) || "";
+  const sortBy = (req.query.sortBy as string) || "date";
+  const sortOrder = (req.query.sortOrder as string) === "asc" ? "ASC" : "DESC";
+  const categoryFilter = req.query.categoryFilter as string;
+
   try {
+    let whereClauses: string[] = ["1=1"];
+    let args: any[] = [];
+
+    if (search) {
+      whereClauses.push(`(
+        h.house_details LIKE ? OR 
+        h.area LIKE ? OR 
+        h.ration_card_type LIKE ? OR 
+        EXISTS (SELECT 1 FROM members m_search WHERE m_search.house_id = h.id AND m_search.name LIKE ?)
+      )`);
+      const searchPattern = `%${search}%`;
+      args.push(searchPattern, searchPattern, searchPattern, searchPattern);
+    }
+
+    if (categoryFilter) {
+      if (categoryFilter === 'APL') {
+        whereClauses.push(`h.ration_card_type = 'APL'`);
+      } else if (categoryFilter === 'BPL') {
+        whereClauses.push(`h.ration_card_type IN ('BPL', 'AAY')`);
+      } else if (categoryFilter === 'Male') {
+        whereClauses.push(`EXISTS (SELECT 1 FROM members m_filter WHERE m_filter.house_id = h.id AND m_filter.gender = 'Male')`);
+      } else if (categoryFilter === 'Female') {
+        whereClauses.push(`EXISTS (SELECT 1 FROM members m_filter WHERE m_filter.house_id = h.id AND m_filter.gender = 'Female')`);
+      } else if (categoryFilter === 'Student') {
+        whereClauses.push(`EXISTS (SELECT 1 FROM members m_filter WHERE m_filter.house_id = h.id AND (LOWER(m_filter.occupation) LIKE '%student%' OR LOWER(m_filter.education) LIKE '%student%'))`);
+      } else if (categoryFilter === 'Senior') {
+        whereClauses.push(`EXISTS (SELECT 1 FROM members m_filter WHERE m_filter.house_id = h.id AND CAST(m_filter.age AS INTEGER) >= 60)`);
+      }
+    }
+
+    let orderByClause = "h.created_at " + sortOrder;
+    if (sortBy === 'details') orderByClause = "h.house_details " + sortOrder;
+    if (sortBy === 'area') orderByClause = "h.area " + sortOrder;
+
+    const whereSql = whereClauses.join(" AND ");
+
+    // Fetch total count for pagination
+    const countResult = await db.execute({
+      sql: `SELECT COUNT(DISTINCT h.id) as total FROM houses h WHERE ${whereSql}`,
+      args: args
+    });
+    const totalCount = Number(countResult.rows[0]?.total ?? countResult.rows[0]?.[0] ?? 0);
+
+    // Fetch houses with limit and offset
     const result = await db.execute({
-      sql: `SELECT h.*, COUNT(m.id) as member_count, GROUP_CONCAT(m.name) as member_names
+      sql: `SELECT h.*, 
+                   COUNT(DISTINCT m.id) as member_count, 
+                   GROUP_CONCAT(DISTINCT m.name) as member_names
             FROM houses h
             LEFT JOIN members m ON h.id = m.house_id
+            WHERE ${whereSql}
             GROUP BY h.id
-            ORDER BY h.created_at DESC
+            ORDER BY ${orderByClause}
             LIMIT ? OFFSET ?`,
-      args: [limit, offset],
+      args: [...args, limit, offset],
     });
+
     const houses = result.rows.map((h: any) => ({
       id: h.id ?? h[0],
       house_details: h.house_details ?? h[1],
@@ -248,8 +333,10 @@ app.get("/api/houses", async (req, res) => {
       members: (h.member_names || "").split(',').filter(Boolean).map((name: string) => ({ name })),
       member_count: Number(h.member_count ?? 0)
     }));
-    res.json(houses);
+
+    res.json({ houses, totalCount, page, limit });
   } catch (err) {
+    console.error("Fetch houses error:", err);
     res.status(500).json({ error: "Failed to fetch houses" });
   }
 });
@@ -322,6 +409,7 @@ app.post("/api/survey", async (req, res) => {
     }
 
     await tx.commit();
+    await logActivity(req.header('x-user-name'), 'CREATE_SURVEY', `Created house survey: ${house.house_details}`);
     res.json({ success: true, id: houseId?.toString() });
   } catch (error: any) {
     console.error("Survey submission failure:", error);
@@ -411,6 +499,7 @@ app.put("/api/houses/:id", async (req, res) => {
       sql: "UPDATE houses SET house_details = ?, area = ?, ration_card_type = ?, phone_numbers = ? WHERE id = ?", 
       args: [house_details, area, ration_card_type, phones, id] 
     });
+    await logActivity(req.header('x-user-name'), 'UPDATE_HOUSE', `Updated house ID: ${id}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Update house failed" });
@@ -422,6 +511,7 @@ app.delete("/api/houses/:id", async (req, res) => {
   try {
     await db.execute({ sql: "DELETE FROM members WHERE house_id = ?", args: [id] });
     await db.execute({ sql: "DELETE FROM houses WHERE id = ?", args: [id] });
+    await logActivity(req.header('x-user-name'), 'DELETE_HOUSE', `Deleted house ID: ${id}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Delete house failed" });
@@ -437,6 +527,7 @@ app.post("/api/houses/:id/members", async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [id, m.name, m.gender, m.age, m.occupation, m.education, m.ration_card_type || "", m.membership_details, m.blood_group, m.phone, m.other_details],
     });
+    await logActivity(req.header('x-user-name'), 'ADD_MEMBER', `Added member ${m.name} to house ID: ${id}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Add member failed" });
@@ -453,6 +544,7 @@ app.put("/api/members/:id", async (req, res) => {
             WHERE id = ?`,
       args: [m.name, m.gender, m.age, m.occupation, m.education, m.ration_card_type, m.membership_details, m.blood_group, m.phone, m.other_details, id],
     });
+    await logActivity(req.header('x-user-name'), 'UPDATE_MEMBER', `Updated member ID: ${id} (${m.name})`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Update member failed" });
@@ -463,9 +555,27 @@ app.delete("/api/members/:id", async (req, res) => {
   const { id } = req.params;
   try {
     await db.execute({ sql: "DELETE FROM members WHERE id = ?", args: [id] });
+    await logActivity(req.header('x-user-name'), 'DELETE_MEMBER', `Deleted member ID: ${id}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Delete member failed" });
+  }
+});
+
+app.get("/api/logs", async (_req, res) => {
+  try {
+    const result = await db.execute("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 500");
+    const logs = result.rows.map((r: any) => ({
+      id: r.id ?? r[0],
+      username: r.username ?? r[1],
+      action: r.action ?? r[2],
+      details: r.details ?? r[3],
+      created_at: r.created_at ?? r[4]
+    }));
+    res.json(logs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch logs" });
   }
 });
 
