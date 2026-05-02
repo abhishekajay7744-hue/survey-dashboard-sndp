@@ -270,7 +270,7 @@ export default function App() {
   }, [categoryFilter, houseSearch, sortBy, sortOrder]);
 
   useEffect(() => {
-    if (activeTab === 'logs' && user?.role === 'admin') {
+    if (activeTab === 'logs') {
       fetchLogs();
     }
   }, [activeTab, user]);
@@ -1146,15 +1146,13 @@ export default function App() {
             collapsed={!isSidebarOpen && isDesktop}
             onClick={() => { setActiveTab('settings'); if (!isDesktop) setIsSidebarOpen(false); }}
           />
-          {user?.role === 'admin' && (
-            <SidebarItem
-              icon={<Activity size={20} />}
-              label="Activity Logs"
-              active={activeTab === 'logs'}
-              collapsed={!isSidebarOpen && isDesktop}
-              onClick={() => { setActiveTab('logs'); if (!isDesktop) setIsSidebarOpen(false); }}
-            />
-          )}
+          <SidebarItem
+            icon={<Activity size={20} />}
+            label="Activity Logs"
+            active={activeTab === 'logs'}
+            collapsed={!isSidebarOpen && isDesktop}
+            onClick={() => { setActiveTab('logs'); if (!isDesktop) setIsSidebarOpen(false); }}
+          />
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -1778,14 +1776,12 @@ export default function App() {
                                 >
                                   <Users size={18} />
                                 </button>
-                                {user?.role === 'admin' && (
-                                  <button
-                                    onClick={() => handleDeleteHouse(house.id!)}
-                                    className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50"
-                                  >
-                                    <Trash2 size={18} />
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handleDeleteHouse(house.id!)}
+                                  className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -1895,40 +1891,38 @@ export default function App() {
                 </form>
               </section>
 
-              {user?.role === 'admin' && (
-                <section className="bg-white p-8 rounded-2xl border border-red-100 shadow-sm mt-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="bg-red-100 p-2 rounded-lg text-red-600">
-                      <Trash2 size={24} />
-                    </div>
-                    <h2 className="text-xl font-bold text-red-600">Danger Zone</h2>
+              <section className="bg-white p-8 rounded-2xl border border-red-100 shadow-sm mt-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="bg-red-100 p-2 rounded-lg text-red-600">
+                    <Trash2 size={24} />
                   </div>
-                  <p className="text-slate-500 text-sm mb-6">
-                    To clear all survey records, please enter your current admin password below.
-                  </p>
-                  <div className="space-y-4">
-                    <FormField label="Enter Admin Password to Confirm">
-                      <input
-                        type="password"
-                        value={clearPassword}
-                        onChange={(e) => setClearPassword(e.target.value)}
-                        className="form-input border-red-200 focus:border-red-500 focus:ring-red-500"
-                        placeholder="Type password here..."
-                      />
-                    </FormField>
-                    <button
-                      onClick={handleClearData}
-                      className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
-                    >
-                      Permanently Clear All Data
-                    </button>
-                  </div>
-                </section>
-              )}
+                  <h2 className="text-xl font-bold text-red-600">Danger Zone</h2>
+                </div>
+                <p className="text-slate-500 text-sm mb-6">
+                  To clear all survey records, please enter your current admin password below.
+                </p>
+                <div className="space-y-4">
+                  <FormField label="Enter Admin Password to Confirm">
+                    <input
+                      type="password"
+                      value={clearPassword}
+                      onChange={(e) => setClearPassword(e.target.value)}
+                      className="form-input border-red-200 focus:border-red-500 focus:ring-red-500"
+                      placeholder="Type password here..."
+                    />
+                  </FormField>
+                  <button
+                    onClick={handleClearData}
+                    className="w-full py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                  >
+                    Permanently Clear All Data
+                  </button>
+                </div>
+              </section>
             </div>
           )}
 
-          {activeTab === 'logs' && user?.role === 'admin' && (
+          {activeTab === 'logs' && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-4 sm:p-6 max-w-6xl mx-auto">
               <div className="flex items-center gap-3 mb-6">
                 <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
@@ -1976,7 +1970,7 @@ export default function App() {
             { tab: 'survey' as Tab, icon: <PlusCircle size={20} />, label: 'Survey' },
             { tab: 'records' as Tab, icon: <Home size={20} />, label: 'Records' },
             { tab: 'settings' as Tab, icon: <Users size={20} />, label: 'Settings' },
-            ...(user?.role === 'admin' ? [{ tab: 'logs' as Tab, icon: <Activity size={20} />, label: 'Logs' }] : []),
+            { tab: 'logs' as Tab, icon: <Activity size={20} />, label: 'Logs' },
           ].map(({ tab, icon, label }) => (
             <button
               key={tab}
@@ -2400,15 +2394,13 @@ export default function App() {
                             >
                               <Edit size={18} />
                             </button>
-                            {user?.role === 'admin' && (
-                              <button
-                                onClick={() => handleDeleteMember(member.id!)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Delete Member"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleDeleteMember(member.id!)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete Member"
+                            >
+                              <Trash2 size={18} />
+                            </button>
                           </div>
                         </div>
                       )}
