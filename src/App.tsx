@@ -479,7 +479,16 @@ export default function App() {
 
 
 
-  const generateCSV = () => {
+  const generateCSV = async () => {
+    let allData: House[] = [];
+    try {
+      const res = await fetch('/api/export');
+      allData = await res.json();
+    } catch (err) {
+      console.error("Export failed, falling back to current view data", err);
+      allData = houses;
+    }
+
     // CSV headers
     const headers = [
       'House ID',
@@ -501,7 +510,7 @@ export default function App() {
 
     const rows: string[][] = [headers];
 
-    filteredAndSortedHouses.forEach(house => {
+    allData.forEach(house => {
       const housePhones = (house.phone_numbers || []).join(' / ');
       const date = house.created_at ? new Date(house.created_at).toLocaleDateString() : '';
       

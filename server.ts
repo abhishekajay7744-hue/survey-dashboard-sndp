@@ -364,6 +364,50 @@ app.get("/api/houses/:id/members", async (req, res) => {
   }
 });
 
+app.get("/api/export", async (req, res) => {
+  try {
+    const houseResult = await db.execute("SELECT * FROM houses ORDER BY created_at DESC");
+    const memberResult = await db.execute("SELECT * FROM members");
+    
+    const membersByHouse: Record<number, any[]> = {};
+    memberResult.rows.forEach((row: any) => {
+      const house_id = Number(row.house_id ?? row[1]);
+      if (!membersByHouse[house_id]) membersByHouse[house_id] = [];
+      membersByHouse[house_id].push({
+        id: row.id ?? row[0],
+        name: row.name ?? row[2],
+        gender: row.gender ?? row[3],
+        age: Number(row.age ?? row[4] ?? 0),
+        occupation: row.occupation ?? row[5],
+        education: row.education ?? row[6],
+        ration_card_type: row.ration_card_type ?? row[7],
+        membership_details: row.membership_details ?? row[8],
+        blood_group: row.blood_group ?? row[9],
+        phone: row.phone ?? row[10],
+        other_details: row.other_details ?? row[11],
+      });
+    });
+
+    const houses = houseResult.rows.map((h: any) => {
+      const id = Number(h.id ?? h[0]);
+      return {
+        id,
+        house_details: h.house_details ?? h[1],
+        area: h.area ?? h[2],
+        ration_card_type: h.ration_card_type ?? h[3],
+        phone_numbers: JSON.parse((h.phone_numbers ?? h[4] ?? '[]') || '[]'),
+        created_at: h.created_at ?? h[5],
+        members: membersByHouse[id] || [],
+      };
+    });
+
+    res.json(houses);
+  } catch (err) {
+    console.error("Export error:", err);
+    res.status(500).json({ error: "Failed to export data" });
+  }
+});
+
 app.post("/api/survey", async (req, res) => {
   const { house, members } = req.body;
   if (!house || !members || !Array.isArray(members)) {
