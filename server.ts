@@ -364,7 +364,8 @@ app.get("/api/export", async (_req, res) => {
         house_details: h.house_details ?? h[1],
         area: h.area ?? h[2],
         ration_card_type: h.ration_card_type ?? h[3],
-        created_at: h.created_at ?? h[4],
+        phone_numbers: JSON.parse((h.phone_numbers ?? h[4] ?? '[]') || '[]'),
+        created_at: h.created_at ?? h[5],
         members: membersByHouse.get(id) || []
       };
     });
