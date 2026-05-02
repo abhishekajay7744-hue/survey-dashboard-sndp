@@ -50,56 +50,56 @@ async function initDb() {
     console.error("Migration check failed or tables don't exist yet:", e);
   }
 
-  await db.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS houses (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      house_details TEXT,
-      area TEXT,
-      ration_card_type TEXT,
-      phone_numbers TEXT DEFAULT '[]',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+  // Create tables individually for Turso compatibility
+  await db.execute(`CREATE TABLE IF NOT EXISTS houses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_details TEXT,
+    area TEXT,
+    ration_card_type TEXT,
+    phone_numbers TEXT DEFAULT '[]',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 
-    CREATE TABLE IF NOT EXISTS members (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      house_id INTEGER,
-      name TEXT,
-      gender TEXT,
-      age INTEGER,
-      occupation TEXT,
-      education TEXT,
-      ration_card_type TEXT,
-      membership_details TEXT,
-      blood_group TEXT,
-      phone TEXT,
-      other_details TEXT,
-      FOREIGN KEY (house_id) REFERENCES houses(id)
-    );
+  await db.execute(`CREATE TABLE IF NOT EXISTS members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    house_id INTEGER,
+    name TEXT,
+    gender TEXT,
+    age INTEGER,
+    occupation TEXT,
+    education TEXT,
+    ration_card_type TEXT,
+    membership_details TEXT,
+    blood_group TEXT,
+    phone TEXT,
+    other_details TEXT,
+    FOREIGN KEY (house_id) REFERENCES houses(id)
+  )`);
 
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE,
-      password TEXT,
-      google_id TEXT UNIQUE,
-      email TEXT UNIQUE,
-      role TEXT DEFAULT 'admin'
-    );
+  await db.execute(`CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT,
+    google_id TEXT UNIQUE,
+    email TEXT UNIQUE,
+    role TEXT DEFAULT 'admin'
+  )`);
 
-    CREATE TABLE IF NOT EXISTS activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT,
-      action TEXT,
-      details TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+  await db.execute(`CREATE TABLE IF NOT EXISTS activity_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    action TEXT,
+    details TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 
-    CREATE INDEX IF NOT EXISTS idx_members_house_id ON members(house_id);
-    CREATE INDEX IF NOT EXISTS idx_houses_area ON houses(area);
-    CREATE INDEX IF NOT EXISTS idx_members_name ON members(name);
-    CREATE INDEX IF NOT EXISTS idx_houses_ration ON houses(ration_card_type);
-    CREATE INDEX IF NOT EXISTS idx_members_gender ON members(gender);
-    CREATE INDEX IF NOT EXISTS idx_members_age ON members(age);
-  `);
+  // Create indexes individually
+  try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_members_house_id ON members(house_id)`); } catch(e) {}
+  try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_houses_area ON houses(area)`); } catch(e) {}
+  try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_members_name ON members(name)`); } catch(e) {}
+  try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_houses_ration ON houses(ration_card_type)`); } catch(e) {}
+  try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_members_gender ON members(gender)`); } catch(e) {}
+  try { await db.execute(`CREATE INDEX IF NOT EXISTS idx_members_age ON members(age)`); } catch(e) {}
 
   // Migration: add phone_numbers column to existing houses table if missing
   try {
@@ -114,6 +114,7 @@ async function initDb() {
   }
 
   console.log("Database tables initialized.");
+  // Only create admin account - no editor needed
   const adminRes = await db.execute("SELECT * FROM users WHERE username = 'admin'");
   if (adminRes.rows.length === 0) {
     const salt = bcrypt.genSaltSync(10);
@@ -123,17 +124,12 @@ async function initDb() {
       args: ["admin", hashedPassword, "admin"],
     });
     console.log("Default admin account created.");
-  }
-
-  const editorRes = await db.execute("SELECT * FROM users WHERE username = 'editor'");
-  if (editorRes.rows.length === 0) {
-    const salt = bcrypt.genSaltSync(10);
-    const hashedPassword = bcrypt.hashSync("editor123", salt);
+  } else {
+    // Ensure existing admin has role set
     await db.execute({
-      sql: "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-      args: ["editor", hashedPassword, "data_entry"],
+      sql: "UPDATE users SET role = 'admin' WHERE username = 'admin' AND (role IS NULL OR role = '')",
+      args: [],
     });
-    console.log("Default editor account created.");
   }
 }
 
