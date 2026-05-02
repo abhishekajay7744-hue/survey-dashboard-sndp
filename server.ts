@@ -173,7 +173,7 @@ app.post("/api/login", async (req, res) => {
     });
     const user = result.rows[0] as any;
     if (user && bcrypt.compareSync(password, user.password as string)) {
-      res.json({ success: true, user: { id: user.id, username: user.username } });
+      res.json({ success: true, user: { id: user.id, username: user.username, role: user.role || 'admin' } });
     } else {
       res.status(401).json({ success: false, error: "Invalid credentials" });
     }
