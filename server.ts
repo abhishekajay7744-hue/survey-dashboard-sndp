@@ -147,7 +147,7 @@ async function logActivity(username: string | undefined | null, action: string, 
 
 // Middleware for caching
 app.use((req, res, next) => {
-  if (req.path === "/" || req.path === "/index.html") {
+  if (req.path === "/" || req.path === "/index.html" || req.path.startsWith("/api/")) {
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");
