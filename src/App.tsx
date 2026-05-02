@@ -1926,7 +1926,6 @@ export default function App() {
                 </section>
               )}
             </div>
-            </div>
           )}
 
           {activeTab === 'logs' && user?.role === 'admin' && (
