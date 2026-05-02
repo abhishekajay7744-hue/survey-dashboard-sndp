@@ -946,34 +946,32 @@ export default function App() {
       try {
         const isNew = editingMemberId === -1;
         const url = isNew ? `/api/houses/${selectedHouse.id}/members` : `/api/members/${editingMemberId}`;
-      const method = isNew ? 'POST' : 'PUT';
-      
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
-        body: JSON.stringify(memberEditForm)
-      });
-      if (res.ok) {
-        alert(isNew ? 'New member added!' : 'Member updated!');
-        setEditingMemberId(null);
-        setMemberEditForm(null);
-        fetchHouses();
-        fetchSuggestions();
-        if (isNew) fetchStats();
-        // Fetch fresh members for the selected house to avoid crash
-        if (selectedHouse?.id) {
-          try {
-            const membersRes = await fetch(`/api/houses/${selectedHouse.id}/members`);
-            const freshMembers = await membersRes.json();
-            setSelectedHouse(prev => prev ? { ...prev, members: Array.isArray(freshMembers) ? freshMembers : [] } : null);
-          } catch (err) {
-            console.error('Error refreshing members:', err);
+        const method = isNew ? 'POST' : 'PUT';
+        
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json', 'X-User-Name': user?.username || '' },
+          body: JSON.stringify(memberEditForm)
+        });
+        if (res.ok) {
+          alert(isNew ? 'New member added!' : 'Member updated!');
+          setEditingMemberId(null);
+          setMemberEditForm(null);
+          fetchHouses();
+          fetchSuggestions();
+          if (isNew) fetchStats();
+          if (selectedHouse?.id) {
+            try {
+              const membersRes = await fetch(`/api/houses/${selectedHouse.id}/members`);
+              const freshMembers = await membersRes.json();
+              setSelectedHouse(prev => prev ? { ...prev, members: Array.isArray(freshMembers) ? freshMembers : [] } : null);
+            } catch (err) {
+              console.error('Error refreshing members:', err);
+            }
           }
-        }
-      } else {
-        const errorData = await res.json();
-        alert(errorData.error || 'Operation failed');
-      }
+        } else {
+          const errorData = await res.json();
+          alert(errorData.error || 'Operation failed');
         }
       } catch (err) {
         console.error(err);
