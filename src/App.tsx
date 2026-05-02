@@ -263,15 +263,24 @@ export default function App() {
     }
   };
 
+  // Fetch suggestions once on login
   useEffect(() => {
     if (!user) return;
     fetchSuggestions();
+    fetchStats();
+  }, [user]);
+
+  // Fetch houses on filter/page changes only
+  useEffect(() => {
+    if (!user) return;
     fetchHouses();
   }, [user, currentPage, debouncedHouseSearch, sortBy, sortOrder, categoryFilter]);
 
+  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [categoryFilter, debouncedHouseSearch, sortBy, sortOrder]);
+
 
   useEffect(() => {
     if (activeTab === 'logs') {
@@ -387,7 +396,7 @@ export default function App() {
     try {
       const queryParams = new URLSearchParams();
       queryParams.append('page', String(currentPage));
-      queryParams.append('limit', '50');
+      queryParams.append('limit', '20');
       if (debouncedHouseSearch) queryParams.append('search', debouncedHouseSearch);
       if (sortBy) queryParams.append('sortBy', sortBy);
       if (sortOrder) queryParams.append('sortOrder', sortOrder);
@@ -2091,9 +2100,11 @@ export default function App() {
                   <h4 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Address & Details</h4>
                   <button
                     onClick={() => setIsEditingHouse(!isEditingHouse)}
-                    className="text-emerald-600 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1 hover:bg-emerald-100 rounded"
+                    title={isEditingHouse ? 'Cancel Edit' : 'Edit Address'}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 active:bg-emerald-300 transition-colors px-3 py-1.5 rounded-lg"
                   >
-                    <Edit size={16} />
+                    <Edit size={13} />
+                    {isEditingHouse ? 'Cancel' : 'Edit'}
                   </button>
                 </div>
 
